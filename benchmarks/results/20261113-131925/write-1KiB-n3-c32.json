@@ -1,0 +1,38 @@
+{
+  "label": "write-1KiB-n3-c32",
+  "timestamp": "2026-11-13T13:24:18.893728Z",
+  "targets": 3,
+  "concurrency": 32,
+  "durationSeconds": 15,
+  "warmupSeconds": 3,
+  "readRatio": 0.0,
+  "valueBytes": 1024,
+  "keys": 10000,
+  "consistency": "linearizable",
+  "spread": false,
+  "writes": {
+    "ok": 21851,
+    "errors": 0,
+    "opsPerSecond": 1456.733,
+    "p50Ms": 21.166,
+    "p95Ms": 30.826,
+    "p99Ms": 37.737,
+    "maxMs": 51.216
+  },
+  "reads": {
+    "ok": 0,
+    "errors": 0,
+    "opsPerSecond": 0.0,
+    "p50Ms": 0,
+    "p95Ms": 0,
+    "p99Ms": 0,
+    "maxMs": 0
+  },
+  "totalOpsPerSecond": 1456.733,
+  "longestUnavailableMs": 0,
+  "errors": {},
+  "nodeCpuMeanPct": 20.2,
+  "nodeCpuMaxPct": 41.4,
+  "nodeHeapMaxMB": 261.8,
+  "nodes": 3
+}

@@ -1,0 +1,38 @@
+{
+  "label": "read-leader-n3-c32",
+  "timestamp": "2026-11-13T13:22:40.567902Z",
+  "targets": 3,
+  "concurrency": 32,
+  "durationSeconds": 15,
+  "warmupSeconds": 3,
+  "readRatio": 1.0,
+  "valueBytes": 128,
+  "keys": 10000,
+  "consistency": "leader",
+  "spread": false,
+  "writes": {
+    "ok": 0,
+    "errors": 0,
+    "opsPerSecond": 0.0,
+    "p50Ms": 0,
+    "p95Ms": 0,
+    "p99Ms": 0,
+    "maxMs": 0
+  },
+  "reads": {
+    "ok": 885862,
+    "errors": 0,
+    "opsPerSecond": 59057.467,
+    "p50Ms": 0.502,
+    "p95Ms": 0.829,
+    "p99Ms": 1.41,
+    "maxMs": 16.308
+  },
+  "totalOpsPerSecond": 59057.467,
+  "longestUnavailableMs": 0,
+  "errors": {},
+  "nodeCpuMeanPct": 7.0,
+  "nodeCpuMaxPct": 43.3,
+  "nodeHeapMaxMB": 170.4,
+  "nodes": 3
+}

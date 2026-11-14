@@ -1,0 +1,14 @@
+// quorumdb-faultlab: deterministic simulator, fault scenarios, safety/linearizability checkers,
+// run analysis. Pure Java on top of core; no wall clock, no threads, no I/O in the simulator.
+dependencies {
+    api project(':core')
+    testImplementation "net.jqwik:jqwik:${jqwikVersion}"
+}
+
+tasks.register('soak', JavaExec) {
+    description = 'Runs many random fault scenarios through the simulator: -Pruns=N -PmasterSeed=S'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'io.quorumdb.faultlab.Soak'
+    args = [project.findProperty('runs') ?: '1000', project.findProperty('masterSeed') ?: '1']
+    maxHeapSize = '1g'
+}

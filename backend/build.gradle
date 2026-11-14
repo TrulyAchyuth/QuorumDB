@@ -1,0 +1,84 @@
+// quorumdb-server: one QuorumDB node as a process. gRPC between nodes (Raft), REST for clients
+// and the dashboard, FaultLab simulation and live fault-injection APIs.
+plugins {
+    id 'org.springframework.boot' version '4.1.2'
+    id 'com.google.protobuf' version '0.10.1'
+}
+
+dependencies {
+    implementation project(':core')
+    implementation project(':simulation')
+
+    implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    implementation 'io.micrometer:micrometer-registry-prometheus'
+
+    implementation platform("io.grpc:grpc-bom:${grpcVersion}")
+    implementation 'io.grpc:grpc-netty-shaded'
+    implementation 'io.grpc:grpc-protobuf'
+    implementation 'io.grpc:grpc-stub'
+    implementation "com.google.protobuf:protobuf-java:${protobufVersion}"
+    compileOnly 'org.apache.tomcat:annotations-api:6.0.53' // @Generated on gRPC stubs
+
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+}
+
+sourceSets {
+    main {
+        proto { srcDir "${rootDir}/proto" }
+    }
+}
+
+protobuf {
+    protoc { artifact = "com.google.protobuf:protoc:${protobufVersion}" }
+    plugins {
+        grpc { artifact = "io.grpc:protoc-gen-grpc-java:${grpcVersion}" }
+    }
+    generateProtoTasks {
+        all().configureEach { task ->
+            task.plugins { grpc {} }
+        }
+    }
+}
+
+// Generated sources are not ours to lint.
+tasks.named('compileJava') {
+    options.compilerArgs.removeAll { it.startsWith('-Xlint') }
+    options.compilerArgs += ['-Xlint:none']
+}
+
+tasks.named('test') {
+    // Multi-node integration tests start several servers in one JVM.
+    maxHeapSize = '2g'
+}
+
+bootJar {
+    archiveFileName = 'quorumdb-server.jar'
+}
+
+jar {
+    enabled = false
+}
+
+// Fast unit/slice tests by default; real multi-process cluster tests are a separate task.
+tasks.named('test') {
+    useJUnitPlatform { excludeTags 'integration' }
+}
+
+tasks.register('integrationTest', Test) {
+    description = 'Starts real QuorumDB processes and tests failover, partitions and recovery.'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform { includeTags 'integration' }
+    dependsOn tasks.named('bootJar')
+    systemProperty 'quorumdb.serverJar', layout.buildDirectory.file('libs/quorumdb-server.jar').get().asFile.absolutePath
+    testLogging {
+        events 'passed', 'failed', 'skipped'
+        showStandardStreams = true
+        exceptionFormat 'full'
+    }
+    shouldRunAfter tasks.named('test')
+}
+
+tasks.named('check') { dependsOn tasks.named('integrationTest') }

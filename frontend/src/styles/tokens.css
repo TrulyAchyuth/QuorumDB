@@ -1,0 +1,146 @@
+/*
+ * QuorumDB design tokens. Light theme is primary; dark is a selected theme (its own steps, not an
+ * inversion). Chart colors follow a validated categorical order (writes = slot 1 blue, reads = slot 2
+ * orange); status colors are reserved for health and always paired with an icon and a label.
+ */
+:root {
+  color-scheme: light;
+  /* surfaces */
+  --page: #f9f9f7;
+  --surface: #fcfcfb;
+  --surface-raised: #ffffff;
+  --surface-sunken: #f2f2ef;
+  --hover: rgba(11, 11, 11, 0.04);
+  --selected: rgba(42, 120, 214, 0.08);
+  /* ink */
+  --text: #0b0b0b;
+  --text-2: #52514e;
+  --text-3: #898781;
+  --text-on-accent: #ffffff;
+  /* lines */
+  --border: rgba(11, 11, 11, 0.09);
+  --border-strong: rgba(11, 11, 11, 0.16);
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  /* accent and data */
+  --accent: #2a78d6;
+  --accent-hover: #256abf;
+  --series-1: #2a78d6; /* writes */
+  --series-2: #eb6834; /* reads */
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  /* status (reserved) */
+  --good: #0ca30c;
+  --good-text: #006300;
+  --warning: #fab219;
+  --warning-text: #8a5a00;
+  --serious: #ec835a;
+  --critical: #d03b3b;
+  --critical-text: #b42c2c;
+  --good-bg: rgba(12, 163, 12, 0.09);
+  --warning-bg: rgba(250, 178, 25, 0.14);
+  --critical-bg: rgba(208, 59, 59, 0.09);
+  --neutral-bg: rgba(11, 11, 11, 0.05);
+  --fault-band: rgba(208, 59, 59, 0.07);
+
+  --shadow-sm: 0 1px 2px rgba(11, 11, 11, 0.04);
+  --shadow-md: 0 4px 16px rgba(11, 11, 11, 0.06), 0 1px 3px rgba(11, 11, 11, 0.05);
+  --shadow-lg: 0 16px 48px rgba(11, 11, 11, 0.16);
+
+  /* type */
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  --fs-xs: 11px;
+  --fs-sm: 12.5px;
+  --fs-md: 13.5px;
+  --fs-lg: 15px;
+  --fs-xl: 20px;
+  --fs-2xl: 26px;
+
+  /* spacing scale */
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 16px;
+  --s5: 24px;
+  --s6: 32px;
+  --s7: 48px;
+
+  --radius-sm: 5px;
+  --radius: 8px;
+  --radius-lg: 12px;
+  --sidebar: 228px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface: #161615;
+    --surface-raised: #1a1a19;
+    --surface-sunken: #111110;
+    --hover: rgba(255, 255, 255, 0.05);
+    --selected: rgba(57, 135, 229, 0.14);
+    --text: #f0efec;
+    --text-2: #c3c2b7;
+    --text-3: #898781;
+    --border: rgba(255, 255, 255, 0.08);
+    --border-strong: rgba(255, 255, 255, 0.16);
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --accent: #3987e5;
+    --accent-hover: #5598e7;
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+    --series-5: #d55181;
+    --good-text: #0ca30c;
+    --warning-text: #fab219;
+    --critical-text: #e66767;
+    --good-bg: rgba(12, 163, 12, 0.14);
+    --warning-bg: rgba(250, 178, 25, 0.12);
+    --critical-bg: rgba(208, 59, 59, 0.16);
+    --neutral-bg: rgba(255, 255, 255, 0.06);
+    --fault-band: rgba(230, 103, 103, 0.10);
+    --shadow-sm: none;
+    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.6);
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d;
+  --surface: #161615;
+  --surface-raised: #1a1a19;
+  --surface-sunken: #111110;
+  --hover: rgba(255, 255, 255, 0.05);
+  --selected: rgba(57, 135, 229, 0.14);
+  --text: #f0efec;
+  --text-2: #c3c2b7;
+  --text-3: #898781;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --grid: #2c2c2a;
+  --axis: #383835;
+  --accent: #3987e5;
+  --accent-hover: #5598e7;
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+  --good-text: #0ca30c;
+  --warning-text: #fab219;
+  --critical-text: #e66767;
+  --good-bg: rgba(12, 163, 12, 0.14);
+  --warning-bg: rgba(250, 178, 25, 0.12);
+  --critical-bg: rgba(208, 59, 59, 0.16);
+  --neutral-bg: rgba(255, 255, 255, 0.06);
+  --fault-band: rgba(230, 103, 103, 0.10);
+  --shadow-sm: none;
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.6);
+}

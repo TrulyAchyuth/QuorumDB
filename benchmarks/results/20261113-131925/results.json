@@ -1,0 +1,1934 @@
+{
+  "timestamp": "20261113-131925",
+  "machine": {
+    "cpu": "Apple M5",
+    "cores": 10,
+    "memoryGB": 24.0,
+    "os": "Darwin 27.0.0",
+    "java": "openjdk version \"21.0.12.1\" 2026-08-18 LTS",
+    "jvmFlags": "-Xmx512m (per node), defaults otherwise",
+    "note": "load generator and all nodes share one machine; networking is localhost"
+  },
+  "durationSeconds": 15,
+  "warmupSeconds": 3,
+  "results": [
+    {
+      "label": "write-n1-c1",
+      "timestamp": "2026-11-13T13:19:44.757878Z",
+      "targets": 1,
+      "concurrency": 1,
+      "durationSeconds": 15,
+      "warmupSeconds": 3,
+      "readRatio": 0.0,
+      "valueBytes": 128,
+      "keys": 10000,
+      "consistency": "linearizable",
+      "spread": false,
+      "writes": {
+        "ok": 3632,
+        "errors": 0,
+        "opsPerSecond": 242.133,
+        "p50Ms": 4.001,
+        "p95Ms": 5.055,
+        "p99Ms": 5.94,
+        "maxMs": 10.332
+      },
+      "reads": {
+        "ok": 0,
+        "errors": 0,
+        "opsPerSecond": 0.0,
+        "p50Ms": 0,
+        "p95Ms": 0,
+        "p99Ms": 0,
+        "maxMs": 0
+      },
+      "totalOpsPerSecond": 242.133,
+      "longestUnavailableMs": 0,
+      "errors": {},
+      "nodeCpuMeanPct": 3.0,
+      "nodeCpuMaxPct": 4.8,
+      "nodeHeapMaxMB": 51.8,
+      "nodes": 1
+    },
+    {
+      "label": "write-n1-c16",
+      "timestamp": "2026-11-13T13:20:03.413756Z",
+      "targets": 1,
+      "concurrency": 16,
+      "durationSeconds": 15,
+      "warmupSeconds": 3,
+      "readRatio": 0.0,
+      "valueBytes": 128,
+      "keys": 10000,
+      "consistency": "linearizable",
+      "spread": false,
+      "writes": {
+        "ok": 30336,
+        "errors": 0,
+        "opsPerSecond": 2022.4,
+        "p50Ms": 7.969,
+        "p95Ms": 8.322,
+        "p99Ms": 10.019,
+        "maxMs": 46.411
+      },
+      "reads": {
+        "ok": 0,
+        "errors": 0,
+        "opsPerSecond": 0.0,
+        "p50Ms": 0,
+        "p95Ms": 0,
+        "p99Ms": 0,
+        "maxMs": 0
+      },
+      "totalOpsPerSecond": 2022.4,
+      "longestUnavailableMs": 0,
+      "errors": {},
+      "nodeCpuMeanPct": 6.2,
+      "nodeCpuMaxPct": 19.1,
+      "nodeHeapMaxMB": 68.7,
+      "nodes": 1
+    },
+    {
+      "label": "write-n1-c64",
+      "timestamp": "2026-11-13T13:20:22.088703Z",
+      "targets": 1,
+      "concurrency": 64,
+      "durationSeconds": 15,
+      "warmupSeconds": 3,
+      "readRatio": 0.0,
+      "valueBytes": 128,
+      "keys": 10000,
+      "consistency": "linearizable",
+      "spread": false,
+      "writes": {
+        "ok": 118117,
+        "errors": 0,
+        "opsPerSecond": 7874.467,
+        "p50Ms": 7.973,
+        "p95Ms": 9.554,
+        "p99Ms": 14.675,
+        "maxMs": 39.997
+      },
+      "reads": {
+        "ok": 0,
+        "errors": 0,
+        "opsPerSecond": 0.0,
+        "p50Ms": 0,
+        "p95Ms": 0,
+        "p99Ms": 0,
+        "maxMs": 0
+      },
+      "totalOpsPerSecond": 7874.467,
+      "longestUnavailableMs": 0,
+      "errors": {},
+      "nodeCpuMeanPct": 12.9,
+      "nodeCpuMaxPct": 16.2,
+      "nodeHeapMaxMB": 125.2,
+      "nodes": 1
+    },
+    {
+      "label": "write-n3-c1",
+      "timestamp": "2026-11-13T13:20:43.013288Z",
+      "targets": 3,
+      "concurrency": 1,
+      "durationSeconds": 15,
+      "warmupSeconds": 3,
+      "readRatio": 0.0,
+      "valueBytes": 128,
+      "keys": 10000,
+      "consistency": "linearizable",
+      "spread": false,
+      "writes": {
+        "ok": 1461,
+        "errors": 0,
+        "opsPerSecond": 97.4,
+        "p50Ms": 10.518,
+        "p95Ms": 12.026,
+        "p99Ms": 12.917,
+        "maxMs": 16.067
+      },
+      "reads": {
+        "ok": 0,
+        "errors": 0,
+        "opsPerSecond": 0.0,
+        "p50Ms": 0,
+        "p95Ms": 0,
+        "p99Ms": 0,
+        "maxMs": 0
+      },
+      "totalOpsPerSecond": 97.4,
+      "longestUnavailableMs": 0,
+      "errors": {},
+      "nodeCpuMeanPct": 2.7,
+      "nodeCpuMaxPct": 6.6,
+      "nodeHeapMaxMB": 52.3,
+      "nodes": 3
+    },
+    {
+      "label": "write-n3-c16",
+      "timestamp": "2026-11-13T13:21:01.651279Z",
+      "targets": 3,
+      "concurrency": 16,
+      "durationSeconds": 15,
+      "warmupSeconds": 3,
+      "readRatio": 0.0,
+      "valueBytes": 128,
+      "keys": 10000,
+      "consistency": "linearizable",
+      "spread": false,
+      "writes": {
+        "ok": 11825,
+        "errors": 0,
+        "opsPerSecond": 788.333,
+        "p50Ms": 19.703,
+        "p95Ms": 28.261,
+        "p99Ms": 32.763,
+        "maxMs": 43.585
+      },
+      "reads": {
+        "ok": 0,
+        "errors": 0,
+        "opsPerSecond": 0.0,
+        "p50Ms": 0,
+        "p95Ms": 0,
+        "p99Ms": 0,
+        "maxMs": 0
+      },
+      "totalOpsPerSecond": 788.333,
+      "longestUnavailableMs": 0,
+      "errors": {},
+      "nodeCpuMeanPct": 17.8,
+      "nodeCpuMaxPct": 43.5,
+      "nodeHeapMaxMB": 160.2,
+      "nodes": 3
+    },
+    {
+      "label": "write-n3-c64",
+      "timestamp": "2026-11-13T13:21:20.301793Z",
+      "targets": 3,
+      "concurrency": 64,
+      "durationSeconds": 15,
+      "warmupSeconds": 3,
+      "readRatio": 0.0,
+      "valueBytes": 128,
+      "keys": 10000,
+      "consistency": "linearizable",
+      "spread": false,
+      "writes": {
+        "ok": 43050,
+        "errors": 0,
+        "opsPerSecond": 2870.0,
+        "p50Ms": 21.859,
+        "p95Ms": 30.153,
+        "p99Ms": 36.705,
+        "maxMs": 50.703
+      },
+      "reads": {
+        "ok": 0,
+        "errors": 0,
+        "opsPerSecond": 0.0,
+        "p50Ms": 0,
+        "p95Ms": 0,
+        "p99Ms": 0,
+        "maxMs": 0
+      },
+      "totalOpsPerSecond": 2870.0,
+      "longestUnavailableMs": 0,
+      "errors": {},
+      "nodeCpuMeanPct": 12.5,
+      "nodeCpuMaxPct": 36.3,
+      "nodeHeapMaxMB": 158.9,
+      "nodes": 3,
+      "storage": [
+        {
+          "node": "n1",
+          "diskBytes": 14631755,
+          "keys": 9984,
+          "lastIndex": 66860,
+          "snapshotIndex": 60133
+        },
+        {
+          "node": "n2",
+          "diskBytes": 14631755,
+          "keys": 9984,
+          "lastIndex": 66860,
+          "snapshotIndex": 60091
+        },
+        {
+          "node": "n3",
+          "diskBytes": 14631755,
+          "keys": 9984,
+          "lastIndex": 66860,
+          "snapshotIndex": 60155
+        }
+      ]
+    },
+    {
+      "label": "read-linearizable-n3-c32",
+      "timestamp": "2026-11-13T13:22:00.531780Z",
+      "targets": 3,
+      "concurrency": 32,
+      "durationSeconds": 15,
+      "warmupSeconds": 3,
+      "readRatio": 1.0,
+      "valueBytes": 128,
+      "keys": 10000,
+      "consistency": "linearizable",
+      "spread": false,
+      "writes": {
+        "ok": 0,
+        "errors": 0,
+        "opsPerSecond": 0.0,
+        "p50Ms": 0,
+        "p95Ms": 0,
+        "p99Ms": 0,
+        "maxMs": 0
+      },
+      "reads": {
+        "ok": 467618,
+        "errors": 0,
+        "opsPerSecond": 31174.533,
+        "p50Ms": 0.956,
+        "p95Ms": 1.344,
+        "p99Ms": 2.338,
+        "maxMs": 21.137
+      },
+      "totalOpsPerSecond": 31174.533,
+      "longestUnavailableMs": 0,
+      "errors": {},
+      "nodeCpuMeanPct": 9.2,
+      "nodeCpuMaxPct": 41.6,
+      "nodeHeapMaxMB": 170.8,
+      "nodes": 3
+    },
+    {
+      "label": "read-leader-n3-c32",
+      "timestamp": "2026-11-13T13:22:40.567902Z",
+      "targets": 3,
+      "concurrency": 32,
+      "durationSeconds": 15,
+      "warmupSeconds": 3,
+      "readRatio": 1.0,
+      "valueBytes": 128,
+      "keys": 10000,
+      "consistency": "leader",
+      "spread": false,
+      "writes": {
+        "ok": 0,
+        "errors": 0,
+        "opsPerSecond": 0.0,
+        "p50Ms": 0,
+        "p95Ms": 0,
+        "p99Ms": 0,
+        "maxMs": 0
+      },
+      "reads": {
+        "ok": 885862,
+        "errors": 0,
+        "opsPerSecond": 59057.467,
+        "p50Ms": 0.502,
+        "p95Ms": 0.829,
+        "p99Ms": 1.41,
+        "maxMs": 16.308
+      },
+      "totalOpsPerSecond": 59057.467,
+      "longestUnavailableMs": 0,
+      "errors": {},
+      "nodeCpuMeanPct": 7.0,
+      "nodeCpuMaxPct": 43.3,
+      "nodeHeapMaxMB": 170.4,
+      "nodes": 3
+    },
+    {
+      "label": "read-stale-n3-c32",
+      "timestamp": "2026-11-13T13:23:20.333154Z",
+      "targets": 3,
+      "concurrency": 32,
+      "durationSeconds": 15,
+      "warmupSeconds": 3,
+      "readRatio": 1.0,
+      "valueBytes": 128,
+      "keys": 10000,
+      "consistency": "stale",
+      "spread": true,
+      "writes": {
+        "ok": 0,
+        "errors": 0,
+        "opsPerSecond": 0.0,
+        "p50Ms": 0,
+        "p95Ms": 0,
+        "p99Ms": 0,
+        "maxMs": 0
+      },
+      "reads": {
+        "ok": 822692,
+        "errors": 0,
+        "opsPerSecond": 54846.133,
+        "p50Ms": 0.534,
+        "p95Ms": 0.932,
+        "p99Ms": 1.563,
+        "maxMs": 28.301
+      },
+      "totalOpsPerSecond": 54846.133,
+      "longestUnavailableMs": 0,
+      "errors": {},
+      "nodeCpuMeanPct": 8.5,
+      "nodeCpuMaxPct": 29.7,
+      "nodeHeapMaxMB": 182.9,
+      "nodes": 3
+    },
+    {
+      "label": "mixed-50-50-n3-c32",
+      "timestamp": "2026-11-13T13:24:00.213959Z",
+      "targets": 3,
+      "concurrency": 32,
+      "durationSeconds": 15,
+      "warmupSeconds": 3,
+      "readRatio": 0.5,
+      "valueBytes": 128,
+      "keys": 10000,
+      "consistency": "linearizable",
+      "spread": false,
+      "writes": {
+        "ok": 6754,
+        "errors": 0,
+        "opsPerSecond": 450.267,
+        "p50Ms": 29.213,
+        "p95Ms": 44.101,
+        "p99Ms": 51.081,
+        "maxMs": 88.224
+      },
+      "reads": {
+        "ok": 6655,
+        "errors": 0,
+        "opsPerSecond": 443.667,
+        "p50Ms": 39.392,
+        "p95Ms": 66.402,
+        "p99Ms": 74.599,
+        "maxMs": 116.083
+      },
+      "totalOpsPerSecond": 893.933,
+      "longestUnavailableMs": 0,
+      "errors": {},
+      "nodeCpuMeanPct": 13.3,
+      "nodeCpuMaxPct": 49.9,
+      "nodeHeapMaxMB": 304.9,
+      "nodes": 3
+    },
+    {
+      "label": "write-1KiB-n3-c32",
+      "timestamp": "2026-11-13T13:24:18.893728Z",
+      "targets": 3,
+      "concurrency": 32,
+      "durationSeconds": 15,
+      "warmupSeconds": 3,
+      "readRatio": 0.0,
+      "valueBytes": 1024,
+      "keys": 10000,
+      "consistency": "linearizable",
+      "spread": false,
+      "writes": {
+        "ok": 21851,
+        "errors": 0,
+        "opsPerSecond": 1456.733,
+        "p50Ms": 21.166,
+        "p95Ms": 30.826,
+        "p99Ms": 37.737,
+        "maxMs": 51.216
+      },
+      "reads": {
+        "ok": 0,
+        "errors": 0,
+        "opsPerSecond": 0.0,
+        "p50Ms": 0,
+        "p95Ms": 0,
+        "p99Ms": 0,
+        "maxMs": 0
+      },
+      "totalOpsPerSecond": 1456.733,
+      "longestUnavailableMs": 0,
+      "errors": {},
+      "nodeCpuMeanPct": 20.2,
+      "nodeCpuMaxPct": 41.4,
+      "nodeHeapMaxMB": 261.8,
+      "nodes": 3
+    },
+    {
+      "label": "write-via-followers-n3-c32",
+      "timestamp": "2026-11-13T13:24:37.571035Z",
+      "targets": 3,
+      "concurrency": 32,
+      "durationSeconds": 15,
+      "warmupSeconds": 3,
+      "readRatio": 0.0,
+      "valueBytes": 128,
+      "keys": 10000,
+      "consistency": "linearizable",
+      "spread": true,
+      "writes": {
+        "ok": 23480,
+        "errors": 0,
+        "opsPerSecond": 1565.333,
+        "p50Ms": 19.546,
+        "p95Ms": 30.829,
+        "p99Ms": 37.707,
+        "maxMs": 53.688
+      },
+      "reads": {
+        "ok": 0,
+        "errors": 0,
+        "opsPerSecond": 0.0,
+        "p50Ms": 0,
+        "p95Ms": 0,
+        "p99Ms": 0,
+        "maxMs": 0
+      },
+      "totalOpsPerSecond": 1565.333,
+      "longestUnavailableMs": 0,
+      "errors": {},
+      "nodeCpuMeanPct": 4.7,
+      "nodeCpuMaxPct": 9.3,
+      "nodeHeapMaxMB": 181.7,
+      "nodes": 3
+    },
+    {
+      "label": "write-n5-c1",
+      "timestamp": "2026-11-13T13:25:00.142469Z",
+      "targets": 5,
+      "concurrency": 1,
+      "durationSeconds": 15,
+      "warmupSeconds": 3,
+      "readRatio": 0.0,
+      "valueBytes": 128,
+      "keys": 10000,
+      "consistency": "linearizable",
+      "spread": false,
+      "writes": {
+        "ok": 1445,
+        "errors": 0,
+        "opsPerSecond": 96.333,
+        "p50Ms": 10.151,
+        "p95Ms": 15.72,
+        "p99Ms": 18.244,
+        "maxMs": 20.478
+      },
+      "reads": {
+        "ok": 0,
+        "errors": 0,
+        "opsPerSecond": 0.0,
+        "p50Ms": 0,
+        "p95Ms": 0,
+        "p99Ms": 0,
+        "maxMs": 0
+      },
+      "totalOpsPerSecond": 96.333,
+      "longestUnavailableMs": 0,
+      "errors": {},
+      "nodeCpuMeanPct": 2.5,
+      "nodeCpuMaxPct": 7.3,
+      "nodeHeapMaxMB": 55.8,
+      "nodes": 5
+    },
+    {
+      "label": "write-n5-c16",
+      "timestamp": "2026-11-13T13:25:18.798960Z",
+      "targets": 5,
+      "concurrency": 16,
+      "durationSeconds": 15,
+      "warmupSeconds": 3,
+      "readRatio": 0.0,
+      "valueBytes": 128,
+      "keys": 10000,
+      "consistency": "linearizable",
+      "spread": false,
+      "writes": {
+        "ok": 8885,
+        "errors": 0,
+        "opsPerSecond": 592.333,
+        "p50Ms": 26.116,
+        "p95Ms": 37.446,
+        "p99Ms": 48.767,
+        "maxMs": 70.234
+      },
+      "reads": {
+        "ok": 0,
+        "errors": 0,
+        "opsPerSecond": 0.0,
+        "p50Ms": 0,
+        "p95Ms": 0,
+        "p99Ms": 0,
+        "maxMs": 0
+      },
+      "totalOpsPerSecond": 592.333,
+      "longestUnavailableMs": 0,
+      "errors": {},
+      "nodeCpuMeanPct": 11.6,
+      "nodeCpuMaxPct": 36.9,
+      "nodeHeapMaxMB": 157.6,
+      "nodes": 5
+    },
+    {
+      "label": "write-n5-c64",
+      "timestamp": "2026-11-13T13:25:37.438726Z",
+      "targets": 5,
+      "concurrency": 64,
+      "durationSeconds": 15,
+      "warmupSeconds": 3,
+      "readRatio": 0.0,
+      "valueBytes": 128,
+      "keys": 10000,
+      "consistency": "linearizable",
+      "spread": false,
+      "writes": {
+        "ok": 31895,
+        "errors": 0,
+        "opsPerSecond": 2126.333,
+        "p50Ms": 29.739,
+        "p95Ms": 39.495,
+        "p99Ms": 46.54,
+        "maxMs": 75.193
+      },
+      "reads": {
+        "ok": 0,
+        "errors": 0,
+        "opsPerSecond": 0.0,
+        "p50Ms": 0,
+        "p95Ms": 0,
+        "p99Ms": 0,
+        "maxMs": 0
+      },
+      "totalOpsPerSecond": 2126.333,
+      "longestUnavailableMs": 0,
+      "errors": {},
+      "nodeCpuMeanPct": 9.5,
+      "nodeCpuMaxPct": 35.8,
+      "nodeHeapMaxMB": 183.3,
+      "nodes": 5
+    },
+    {
+      "label": "write-n3-c64-no-fsync",
+      "timestamp": "2026-11-13T13:25:58.839624Z",
+      "targets": 3,
+      "concurrency": 64,
+      "durationSeconds": 15,
+      "warmupSeconds": 3,
+      "readRatio": 0.0,
+      "valueBytes": 128,
+      "keys": 10000,
+      "consistency": "linearizable",
+      "spread": false,
+      "writes": {
+        "ok": 397756,
+        "errors": 0,
+        "opsPerSecond": 26517.067,
+        "p50Ms": 1.975,
+        "p95Ms": 4.573,
+        "p99Ms": 8.102,
+        "maxMs": 28.011
+      },
+      "reads": {
+        "ok": 0,
+        "errors": 0,
+        "opsPerSecond": 0.0,
+        "p50Ms": 0,
+        "p95Ms": 0,
+        "p99Ms": 0,
+        "maxMs": 0
+      },
+      "totalOpsPerSecond": 26517.067,
+      "longestUnavailableMs": 0,
+      "errors": {},
+      "nodeCpuMeanPct": 20.3,
+      "nodeCpuMaxPct": 50.7,
+      "nodeHeapMaxMB": 181.6,
+      "nodes": 3
+    },
+    {
+      "label": "write-n3-c32-leader-killed",
+      "timestamp": "2026-11-13T13:26:20.167377Z",
+      "targets": 3,
+      "concurrency": 32,
+      "durationSeconds": 15,
+      "warmupSeconds": 3,
+      "readRatio": 0.0,
+      "valueBytes": 128,
+      "keys": 10000,
+      "consistency": "linearizable",
+      "spread": false,
+      "writes": {
+        "ok": 22483,
+        "errors": 175,
+        "opsPerSecond": 1498.867,
+        "p50Ms": 20.7,
+        "p95Ms": 27.569,
+        "p99Ms": 32.785,
+        "maxMs": 60.333
+      },
+      "reads": {
+        "ok": 0,
+        "errors": 0,
+        "opsPerSecond": 0.0,
+        "p50Ms": 0,
+        "p95Ms": 0,
+        "p99Ms": 0,
+        "maxMs": 0
+      },
+      "totalOpsPerSecond": 1498.867,
+      "longestUnavailableMs": 300,
+      "errors": {
+        "IOException": 32,
+        "ConnectException": 143
+      },
+      "timeline100ms": [
+        [
+          128,
+          0
+        ],
+        [
+          155,
+          0
+        ],
+        [
+          155,
+          0
+        ],
+        [
+          128,
+          0
+        ],
+        [
+          128,
+          0
+        ],
+        [
+          128,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          106,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          150,
+          0
+        ],
+        [
+          128,
+          0
+        ],
+        [
+          106,
+          0
+        ],
+        [
+          146,
+          0
+        ],
+        [
+          142,
+          0
+        ],
+        [
+          192,
+          0
+        ],
+        [
+          133,
+          0
+        ],
+        [
+          155,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          128,
+          0
+        ],
+        [
+          141,
+          0
+        ],
+        [
+          147,
+          0
+        ],
+        [
+          141,
+          0
+        ],
+        [
+          147,
+          0
+        ],
+        [
+          173,
+          0
+        ],
+        [
+          128,
+          0
+        ],
+        [
+          147,
+          0
+        ],
+        [
+          141,
+          0
+        ],
+        [
+          108,
+          0
+        ],
+        [
+          180,
+          0
+        ],
+        [
+          142,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          132,
+          0
+        ],
+        [
+          162,
+          0
+        ],
+        [
+          190,
+          0
+        ],
+        [
+          192,
+          0
+        ],
+        [
+          100,
+          0
+        ],
+        [
+          156,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          165,
+          0
+        ],
+        [
+          128,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          165,
+          0
+        ],
+        [
+          187,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          128,
+          0
+        ],
+        [
+          144,
+          0
+        ],
+        [
+          128,
+          0
+        ],
+        [
+          144,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          141,
+          0
+        ],
+        [
+          154,
+          0
+        ],
+        [
+          192,
+          0
+        ],
+        [
+          134,
+          0
+        ],
+        [
+          122,
+          0
+        ],
+        [
+          166,
+          0
+        ],
+        [
+          186,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          164,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          188,
+          0
+        ],
+        [
+          192,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          192,
+          0
+        ],
+        [
+          164,
+          0
+        ],
+        [
+          156,
+          0
+        ],
+        [
+          128,
+          0
+        ],
+        [
+          0,
+          32
+        ],
+        [
+          0,
+          53
+        ],
+        [
+          0,
+          90
+        ],
+        [
+          155,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          133,
+          0
+        ],
+        [
+          155,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          133,
+          0
+        ],
+        [
+          187,
+          0
+        ],
+        [
+          165,
+          0
+        ],
+        [
+          155,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          133,
+          0
+        ],
+        [
+          155,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          133,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          155,
+          0
+        ],
+        [
+          192,
+          0
+        ],
+        [
+          133,
+          0
+        ],
+        [
+          128,
+          0
+        ],
+        [
+          155,
+          0
+        ],
+        [
+          133,
+          0
+        ],
+        [
+          187,
+          0
+        ],
+        [
+          133,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          128,
+          0
+        ],
+        [
+          155,
+          0
+        ],
+        [
+          136,
+          0
+        ],
+        [
+          189,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          131,
+          0
+        ],
+        [
+          132,
+          0
+        ],
+        [
+          159,
+          0
+        ],
+        [
+          192,
+          0
+        ],
+        [
+          192,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          164,
+          0
+        ],
+        [
+          156,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          135,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          184,
+          0
+        ],
+        [
+          136,
+          0
+        ],
+        [
+          152,
+          0
+        ],
+        [
+          136,
+          0
+        ],
+        [
+          163,
+          0
+        ],
+        [
+          157,
+          0
+        ],
+        [
+          152,
+          0
+        ],
+        [
+          136,
+          0
+        ],
+        [
+          152,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          168,
+          0
+        ],
+        [
+          152,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          141,
+          0
+        ],
+        [
+          147,
+          0
+        ],
+        [
+          131,
+          0
+        ],
+        [
+          157,
+          0
+        ],
+        [
+          163,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          157,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          131,
+          0
+        ],
+        [
+          128,
+          0
+        ],
+        [
+          125,
+          0
+        ],
+        [
+          131,
+          0
+        ],
+        [
+          160,
+          0
+        ]
+      ],
+      "nodeCpuMeanPct": 18.5,
+      "nodeCpuMaxPct": 37.0,
+      "nodeHeapMaxMB": 104.6,
+      "nodes": 3,
+      "fault": "SIGKILL leader n1 at 1794576372.478"
+    },
+    {
+      "label": "write-n3-c32-leader-isolated",
+      "timestamp": "2026-11-13T13:26:41.143565Z",
+      "targets": 3,
+      "concurrency": 32,
+      "durationSeconds": 15,
+      "warmupSeconds": 3,
+      "readRatio": 0.0,
+      "valueBytes": 128,
+      "keys": 10000,
+      "consistency": "linearizable",
+      "spread": false,
+      "writes": {
+        "ok": 20782,
+        "errors": 32,
+        "opsPerSecond": 1385.467,
+        "p50Ms": 22.069,
+        "p95Ms": 29.834,
+        "p99Ms": 33.261,
+        "maxMs": 48.874
+      },
+      "reads": {
+        "ok": 0,
+        "errors": 0,
+        "opsPerSecond": 0.0,
+        "p50Ms": 0,
+        "p95Ms": 0,
+        "p99Ms": 0,
+        "maxMs": 0
+      },
+      "totalOpsPerSecond": 1385.467,
+      "longestUnavailableMs": 300,
+      "errors": {
+        "OUTCOME_UNKNOWN": 32
+      },
+      "timeline100ms": [
+        [
+          106,
+          0
+        ],
+        [
+          155,
+          0
+        ],
+        [
+          101,
+          0
+        ],
+        [
+          123,
+          0
+        ],
+        [
+          128,
+          0
+        ],
+        [
+          101,
+          0
+        ],
+        [
+          155,
+          0
+        ],
+        [
+          128,
+          0
+        ],
+        [
+          133,
+          0
+        ],
+        [
+          192,
+          0
+        ],
+        [
+          128,
+          0
+        ],
+        [
+          128,
+          0
+        ],
+        [
+          128,
+          0
+        ],
+        [
+          128,
+          0
+        ],
+        [
+          104,
+          0
+        ],
+        [
+          120,
+          0
+        ],
+        [
+          104,
+          0
+        ],
+        [
+          128,
+          0
+        ],
+        [
+          152,
+          0
+        ],
+        [
+          128,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          168,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          152,
+          0
+        ],
+        [
+          128,
+          0
+        ],
+        [
+          106,
+          0
+        ],
+        [
+          127,
+          0
+        ],
+        [
+          118,
+          0
+        ],
+        [
+          138,
+          0
+        ],
+        [
+          133,
+          0
+        ],
+        [
+          155,
+          0
+        ],
+        [
+          150,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          128,
+          0
+        ],
+        [
+          175,
+          0
+        ],
+        [
+          192,
+          0
+        ],
+        [
+          130,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          165,
+          0
+        ],
+        [
+          128,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          153,
+          0
+        ],
+        [
+          135,
+          0
+        ],
+        [
+          153,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          103,
+          0
+        ],
+        [
+          153,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          132,
+          0
+        ],
+        [
+          156,
+          0
+        ],
+        [
+          192,
+          0
+        ],
+        [
+          135,
+          0
+        ],
+        [
+          165,
+          0
+        ],
+        [
+          131,
+          0
+        ],
+        [
+          157,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          134,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          154,
+          0
+        ],
+        [
+          128,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          128,
+          0
+        ],
+        [
+          136,
+          0
+        ],
+        [
+          128,
+          0
+        ],
+        [
+          128,
+          0
+        ],
+        [
+          152,
+          0
+        ],
+        [
+          136,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          152,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          168,
+          0
+        ],
+        [
+          128,
+          0
+        ],
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          0
+        ],
+        [
+          2,
+          32
+        ],
+        [
+          156,
+          0
+        ],
+        [
+          132,
+          0
+        ],
+        [
+          156,
+          0
+        ],
+        [
+          132,
+          0
+        ],
+        [
+          156,
+          0
+        ],
+        [
+          132,
+          0
+        ],
+        [
+          156,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          132,
+          0
+        ],
+        [
+          156,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          132,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          156,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          132,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          156,
+          0
+        ],
+        [
+          159,
+          0
+        ],
+        [
+          129,
+          0
+        ],
+        [
+          128,
+          0
+        ],
+        [
+          128,
+          0
+        ],
+        [
+          128,
+          0
+        ],
+        [
+          128,
+          0
+        ],
+        [
+          128,
+          0
+        ],
+        [
+          128,
+          0
+        ],
+        [
+          132,
+          0
+        ],
+        [
+          156,
+          0
+        ],
+        [
+          105,
+          0
+        ],
+        [
+          155,
+          0
+        ],
+        [
+          128,
+          0
+        ],
+        [
+          133,
+          0
+        ],
+        [
+          155,
+          0
+        ],
+        [
+          128,
+          0
+        ],
+        [
+          133,
+          0
+        ],
+        [
+          96,
+          0
+        ],
+        [
+          128,
+          0
+        ],
+        [
+          155,
+          0
+        ],
+        [
+          128,
+          0
+        ],
+        [
+          135,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          132,
+          0
+        ],
+        [
+          117,
+          0
+        ],
+        [
+          139,
+          0
+        ],
+        [
+          128,
+          0
+        ],
+        [
+          149,
+          0
+        ],
+        [
+          128,
+          0
+        ],
+        [
+          128,
+          0
+        ],
+        [
+          128,
+          0
+        ],
+        [
+          128,
+          0
+        ],
+        [
+          128,
+          0
+        ],
+        [
+          139,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          181,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          128,
+          0
+        ],
+        [
+          128,
+          0
+        ],
+        [
+          139,
+          0
+        ],
+        [
+          117,
+          0
+        ],
+        [
+          139,
+          0
+        ],
+        [
+          128,
+          0
+        ],
+        [
+          149,
+          0
+        ],
+        [
+          128,
+          0
+        ]
+      ],
+      "nodeCpuMeanPct": 14.7,
+      "nodeCpuMaxPct": 35.8,
+      "nodeHeapMaxMB": 165.9,
+      "nodes": 3,
+      "fault": "ISOLATE [n1] for 3000 ms"
+    }
+  ]
+}

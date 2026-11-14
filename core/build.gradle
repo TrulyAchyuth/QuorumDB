@@ -1,0 +1,5 @@
+// quorumdb-core: Raft consensus, storage and the KV state machine.
+// Deliberately free of Spring, gRPC and wall-clock/threads so the exact same
+// classes run inside the deterministic simulator and the real server.
+dependencies {
+}

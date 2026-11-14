@@ -1,0 +1,38 @@
+{
+  "label": "read-linearizable-n3-c32",
+  "timestamp": "2026-11-13T13:22:00.531780Z",
+  "targets": 3,
+  "concurrency": 32,
+  "durationSeconds": 15,
+  "warmupSeconds": 3,
+  "readRatio": 1.0,
+  "valueBytes": 128,
+  "keys": 10000,
+  "consistency": "linearizable",
+  "spread": false,
+  "writes": {
+    "ok": 0,
+    "errors": 0,
+    "opsPerSecond": 0.0,
+    "p50Ms": 0,
+    "p95Ms": 0,
+    "p99Ms": 0,
+    "maxMs": 0
+  },
+  "reads": {
+    "ok": 467618,
+    "errors": 0,
+    "opsPerSecond": 31174.533,
+    "p50Ms": 0.956,
+    "p95Ms": 1.344,
+    "p99Ms": 2.338,
+    "maxMs": 21.137
+  },
+  "totalOpsPerSecond": 31174.533,
+  "longestUnavailableMs": 0,
+  "errors": {},
+  "nodeCpuMeanPct": 9.2,
+  "nodeCpuMaxPct": 41.6,
+  "nodeHeapMaxMB": 170.8,
+  "nodes": 3
+}

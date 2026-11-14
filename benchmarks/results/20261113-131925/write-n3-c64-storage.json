@@ -1,0 +1,23 @@
+[
+  {
+    "node": "n1",
+    "diskBytes": 14631755,
+    "keys": 9984,
+    "lastIndex": 66860,
+    "snapshotIndex": 60133
+  },
+  {
+    "node": "n2",
+    "diskBytes": 14631755,
+    "keys": 9984,
+    "lastIndex": 66860,
+    "snapshotIndex": 60091
+  },
+  {
+    "node": "n3",
+    "diskBytes": 14631755,
+    "keys": 9984,
+    "lastIndex": 66860,
+    "snapshotIndex": 60155
+  }
+]

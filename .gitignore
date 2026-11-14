@@ -1,0 +1,30 @@
+# Build output
+build/
+.gradle/
+out/
+*.class
+frontend/dist/
+frontend/node_modules/
+node_modules/
+
+# Local runtime state (node data dirs, logs, pids, tokens)
+data/
+# ...but not the dashboard's bundled benchmark results
+!frontend/src/data/
+.run/
+*.log
+*.pid
+.env
+.env.local
+
+# IDE / OS
+.idea/
+*.iml
+.vscode/
+.DS_Store
+
+# Claude Code local settings
+.claude/settings.local.json
+.jqwik-database
+.run/
+.playwright-mcp/

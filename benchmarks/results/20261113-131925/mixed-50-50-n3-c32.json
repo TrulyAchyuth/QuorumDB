@@ -1,0 +1,38 @@
+{
+  "label": "mixed-50-50-n3-c32",
+  "timestamp": "2026-11-13T13:24:00.213959Z",
+  "targets": 3,
+  "concurrency": 32,
+  "durationSeconds": 15,
+  "warmupSeconds": 3,
+  "readRatio": 0.5,
+  "valueBytes": 128,
+  "keys": 10000,
+  "consistency": "linearizable",
+  "spread": false,
+  "writes": {
+    "ok": 6754,
+    "errors": 0,
+    "opsPerSecond": 450.267,
+    "p50Ms": 29.213,
+    "p95Ms": 44.101,
+    "p99Ms": 51.081,
+    "maxMs": 88.224
+  },
+  "reads": {
+    "ok": 6655,
+    "errors": 0,
+    "opsPerSecond": 443.667,
+    "p50Ms": 39.392,
+    "p95Ms": 66.402,
+    "p99Ms": 74.599,
+    "maxMs": 116.083
+  },
+  "totalOpsPerSecond": 893.933,
+  "longestUnavailableMs": 0,
+  "errors": {},
+  "nodeCpuMeanPct": 13.3,
+  "nodeCpuMaxPct": 49.9,
+  "nodeHeapMaxMB": 304.9,
+  "nodes": 3
+}

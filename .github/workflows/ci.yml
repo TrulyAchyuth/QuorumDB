@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Unit, simulation and property tests
+        run: ./gradlew test --no-daemon
+      - name: Real-process integration tests
+        run: ./gradlew :backend:integrationTest --no-daemon
+      - name: FaultLab soak (2,000 random fault scenarios)
+        run: ./gradlew :simulation:soak -Pruns=2000 -PmasterSeed=${{ github.run_number }} --no-daemon
+      - name: Test summary
+        if: always()
+        run: python3 scripts/test_summary.py build/test-summary.md && cat build/test-summary.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: "**/build/reports/tests/"
+
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - name: Unit tests (Vitest)
+        run: npm test
+      - name: Typecheck and production build
+        run: npm run build
+      - name: Dependency audit (production dependencies)
+        run: npm audit --omit=dev --audit-level=high
+
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build images
+        run: docker compose build
+      - name: Start cluster and verify election, replication, failover, recovery and fault cleanup
+        env:
+          QUORUMDB_ADMIN_TOKEN: ci-admin-token-not-secret-0123456789
+        run: |
+          docker compose up -d
+          python3 scripts/verify_docker.py --compose "docker compose"
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs --tail=200
+      - run: docker compose down -v
+        if: always()

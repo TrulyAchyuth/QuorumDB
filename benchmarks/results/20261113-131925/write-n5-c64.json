@@ -1,0 +1,38 @@
+{
+  "label": "write-n5-c64",
+  "timestamp": "2026-11-13T13:25:37.438726Z",
+  "targets": 5,
+  "concurrency": 64,
+  "durationSeconds": 15,
+  "warmupSeconds": 3,
+  "readRatio": 0.0,
+  "valueBytes": 128,
+  "keys": 10000,
+  "consistency": "linearizable",
+  "spread": false,
+  "writes": {
+    "ok": 31895,
+    "errors": 0,
+    "opsPerSecond": 2126.333,
+    "p50Ms": 29.739,
+    "p95Ms": 39.495,
+    "p99Ms": 46.54,
+    "maxMs": 75.193
+  },
+  "reads": {
+    "ok": 0,
+    "errors": 0,
+    "opsPerSecond": 0.0,
+    "p50Ms": 0,
+    "p95Ms": 0,
+    "p99Ms": 0,
+    "maxMs": 0
+  },
+  "totalOpsPerSecond": 2126.333,
+  "longestUnavailableMs": 0,
+  "errors": {},
+  "nodeCpuMeanPct": 9.5,
+  "nodeCpuMaxPct": 35.8,
+  "nodeHeapMaxMB": 183.3,
+  "nodes": 5
+}

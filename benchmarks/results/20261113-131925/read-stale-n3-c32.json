@@ -1,0 +1,38 @@
+{
+  "label": "read-stale-n3-c32",
+  "timestamp": "2026-11-13T13:23:20.333154Z",
+  "targets": 3,
+  "concurrency": 32,
+  "durationSeconds": 15,
+  "warmupSeconds": 3,
+  "readRatio": 1.0,
+  "valueBytes": 128,
+  "keys": 10000,
+  "consistency": "stale",
+  "spread": true,
+  "writes": {
+    "ok": 0,
+    "errors": 0,
+    "opsPerSecond": 0.0,
+    "p50Ms": 0,
+    "p95Ms": 0,
+    "p99Ms": 0,
+    "maxMs": 0
+  },
+  "reads": {
+    "ok": 822692,
+    "errors": 0,
+    "opsPerSecond": 54846.133,
+    "p50Ms": 0.534,
+    "p95Ms": 0.932,
+    "p99Ms": 1.563,
+    "maxMs": 28.301
+  },
+  "totalOpsPerSecond": 54846.133,
+  "longestUnavailableMs": 0,
+  "errors": {},
+  "nodeCpuMeanPct": 8.5,
+  "nodeCpuMaxPct": 29.7,
+  "nodeHeapMaxMB": 182.9,
+  "nodes": 3
+}

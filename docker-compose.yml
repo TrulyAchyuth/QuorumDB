@@ -1,0 +1,94 @@
+# Three-node QuorumDB cluster plus the dashboard.
+#
+#   docker compose up --build -d          # dashboard on http://localhost:3000, nodes on :8081-8083
+#
+# Fault injection (live FaultLab) is disabled unless an admin token is provided:
+#   export QUORUMDB_ADMIN_TOKEN=$(openssl rand -hex 24)
+#   docker compose up --build -d
+x-node: &node
+  image: quorumdb:local
+  pull_policy: never
+  restart: unless-stopped
+  environment: &env
+    QUORUMDB_CLUSTERID: quorumdb
+    QUORUMDB_ADMINTOKEN: ${QUORUMDB_ADMIN_TOKEN:-}
+    QUORUMDB_FSYNC: "true"
+    JAVA_OPTS: -Xmx512m
+
+services:
+  node1:
+    <<: *node
+    # Only node1 builds the image; node2 and node3 reuse it.
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    hostname: node1
+    environment:
+      <<: *env
+      QUORUMDB_NODEID: n1
+      QUORUMDB_ADVERTISEDHTTP: http://node1:8080
+      QUORUMDB_PEERS: n2=node2:9100=http://node2:8080,n3=node3:9100=http://node3:8080
+    ports: ["8081:8080"]
+    volumes: ["n1-data:/var/lib/quorumdb"]
+    networks:
+      quorumdb:
+        ipv4_address: 10.89.73.11
+
+  node2:
+    <<: *node
+    hostname: node2
+    environment:
+      <<: *env
+      QUORUMDB_NODEID: n2
+      QUORUMDB_ADVERTISEDHTTP: http://node2:8080
+      QUORUMDB_PEERS: n1=node1:9100=http://node1:8080,n3=node3:9100=http://node3:8080
+    ports: ["8082:8080"]
+    volumes: ["n2-data:/var/lib/quorumdb"]
+    networks:
+      quorumdb:
+        ipv4_address: 10.89.73.12
+
+  node3:
+    <<: *node
+    hostname: node3
+    environment:
+      <<: *env
+      QUORUMDB_NODEID: n3
+      QUORUMDB_ADVERTISEDHTTP: http://node3:8080
+      QUORUMDB_PEERS: n1=node1:9100=http://node1:8080,n2=node2:9100=http://node2:8080
+    ports: ["8083:8080"]
+    volumes: ["n3-data:/var/lib/quorumdb"]
+    networks:
+      quorumdb:
+        ipv4_address: 10.89.73.13
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: docker/frontend.Dockerfile
+    image: quorumdb-dashboard:local
+    restart: unless-stopped
+    depends_on: [node1, node2, node3]
+    ports: ["3000:80"]
+    networks: [quorumdb]
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    profiles: ["metrics"]
+    volumes: ["./docker/prometheus.yml:/etc/prometheus/prometheus.yml:ro"]
+    ports: ["9090:9090"]
+    networks: [quorumdb]
+
+volumes:
+  n1-data:
+  n2-data:
+  n3-data:
+
+# Fixed node addresses: the dashboard's nginx proxies to them directly (docker/nginx.conf), because
+# container addresses can change when containers restart. If 10.89.73.0/24 collides with a network you
+# use, change the subnet here and the addresses in docker/nginx.conf together.
+networks:
+  quorumdb:
+    ipam:
+      config:
+        - subnet: 10.89.73.0/24

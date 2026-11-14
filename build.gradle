@@ -1,0 +1,41 @@
+// Root build: shared conventions for every JVM module.
+// Dependency versions are aligned to the Spring Boot BOM so the pure-Java modules
+// (core, simulation, benchmarks) and the Spring Boot backend agree on JUnit/Jackson.
+subprojects {
+    apply plugin: 'java-library'
+
+    group = 'io.quorumdb'
+    version = '0.1.0'
+
+    repositories { mavenCentral() }
+
+    java {
+        toolchain { languageVersion = JavaLanguageVersion.of(21) }
+    }
+
+    dependencies {
+        implementation platform("org.springframework.boot:spring-boot-dependencies:${springBootVersion}")
+        testImplementation platform("org.springframework.boot:spring-boot-dependencies:${springBootVersion}")
+        testImplementation 'org.junit.jupiter:junit-jupiter'
+        testImplementation 'org.assertj:assertj-core'
+        testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    }
+
+    tasks.withType(JavaCompile).configureEach {
+        options.encoding = 'UTF-8'
+        options.compilerArgs += ['-Xlint:all,-serial,-processing', '-parameters']
+    }
+
+    tasks.withType(Test).configureEach {
+        useJUnitPlatform()
+        maxHeapSize = '1g'
+        testLogging {
+            events 'failed', 'skipped'
+            exceptionFormat 'full'
+            showStandardStreams = false
+        }
+        // Seeds for randomized tests can be pinned from the command line:
+        //   ./gradlew test -Dquorumdb.seed=1234
+        systemProperties System.properties.findAll { it.key.toString().startsWith('quorumdb.') }
+    }
+}

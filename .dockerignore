@@ -1,0 +1,9 @@
+**/build
+**/.gradle
+.run
+data
+frontend/node_modules
+frontend/dist
+.git
+docs
+benchmarks/results

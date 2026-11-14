@@ -1,0 +1,38 @@
+# Defaults for a single node on localhost. Every value can be overridden with environment
+# variables (QUORUMDB_NODEID, QUORUMDB_PEERS, SERVER_PORT: Spring relaxed binding drops the dash) or --quorumdb.x=y arguments.
+server:
+  port: 8080
+  shutdown: graceful
+  error:
+    include-stacktrace: never
+    include-message: never
+  tomcat:
+    max-swallow-size: 4MB
+    threads:
+      max: 400
+
+spring:
+  application:
+    name: quorumdb
+  main:
+    banner-mode: off
+  mvc:
+    problemdetails:
+      enabled: false
+
+quorumdb:
+  node-id: n1
+  cluster-id: quorumdb
+  data-dir: ./data/n1
+  grpc-port: 9101
+  peers: ""
+  advertised-http: http://localhost:${server.port}
+  fsync: true
+  admin-token: ""
+
+logging:
+  level:
+    root: INFO
+    io.grpc: WARN
+  pattern:
+    console: "%d{HH:mm:ss.SSS} %-5level [${quorumdb.node-id}] %logger{24} - %msg%n"

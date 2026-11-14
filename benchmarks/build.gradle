@@ -1,0 +1,12 @@
+// quorumdb-benchmarks: closed-loop HTTP load generator. Talks to a running cluster over the public API
+// only; it shares no code with the server, so it measures what a real client sees.
+plugins {
+    id 'application'
+}
+
+application {
+    mainClass = 'io.quorumdb.bench.LoadGenerator'
+}
+
+dependencies {
+}
