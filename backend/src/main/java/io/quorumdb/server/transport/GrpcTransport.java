@@ -92,7 +92,7 @@ public final class GrpcTransport implements Transport, AutoCloseable {
 
     @Override
     public void send(String to, RaftMessage message) {
-        PeerStats s = stats.get(to);
+        PeerStats s = statsFor(to);
         if (s == null) return;
         if (faults.shouldDrop(to)) {
             s.dropped.incrementAndGet();
@@ -136,9 +136,14 @@ public final class GrpcTransport implements Transport, AutoCloseable {
         });
     }
 
+    /** Stats for any node this one knows how to reach (created when a membership change adds one); else null. */
+    private PeerStats statsFor(String peer) {
+        return cluster.address(peer) != null ? stats.computeIfAbsent(peer, p -> new PeerStats()) : null;
+    }
+
     private RaftTransportGrpc.RaftTransportStub stub(String peer) {
         return stubs.computeIfAbsent(peer, p -> {
-            ManagedChannel channel = NettyChannelBuilder.forTarget(cluster.peers().get(p).raftAddress())
+            ManagedChannel channel = NettyChannelBuilder.forTarget(cluster.address(p).raftAddress())
                     .usePlaintext()
                     .maxInboundMessageSize(MAX_MESSAGE_BYTES)
                     .keepAliveTime(30, TimeUnit.SECONDS)
@@ -152,7 +157,8 @@ public final class GrpcTransport implements Transport, AutoCloseable {
         long now = System.currentTimeMillis();
         Map<String, PeerView> out = new LinkedHashMap<>();
         for (String peer : cluster.peerIds()) {
-            PeerStats s = stats.get(peer);
+            PeerStats s = statsFor(peer);
+            if (s == null) continue;
             out.put(peer, new PeerView(peer, cluster.peers().get(peer).raftAddress(), s.sent.get(), s.failed.get(),
                     s.dropped.get(), s.received.get(), s.inFlight.get(),
                     s.lastSuccessMs < 0 ? -1 : now - s.lastSuccessMs,
@@ -173,7 +179,7 @@ public final class GrpcTransport implements Transport, AutoCloseable {
                         + " delivered to " + cluster.self().id()).asRuntimeException());
                 return;
             }
-            PeerStats s = stats.get(envelope.getFrom());
+            PeerStats s = statsFor(envelope.getFrom());
             if (s == null) {
                 response.onError(Status.PERMISSION_DENIED.withDescription("unknown sender").asRuntimeException());
                 return;

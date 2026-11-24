@@ -125,7 +125,7 @@ public final class NodeRuntime implements AutoCloseable {
         int inc = incarnation;
         RaftConfig config = new RaftConfig(cluster.self().id(), cluster.peerIds(), props.electionTimeoutMinMs(),
                 props.electionTimeoutMaxMs(), props.heartbeatIntervalMs(), 512, 4 << 20, props.snapshotThreshold(),
-                50_000, props.preVote(), props.checkQuorum(), false);
+                50_000, props.preVote(), props.checkQuorum(), false, props.join());
         Scheduler scheduler = new Scheduler() {
             @Override
             public long nowMs() {
@@ -142,7 +142,9 @@ public final class NodeRuntime implements AutoCloseable {
         };
         raft = new RaftNode(config, storage, kv, transport, scheduler, bound -> ThreadLocalRandom.current().nextLong(bound),
                 e -> {
-                    if (incarnation == inc) record(e);
+                    if (incarnation != inc) return;
+                    record(e);
+                    if (e.type() == RaftEvent.Type.MEMBERSHIP_CHANGED && raft != null) cluster.updateMembers(raft.members());
                 });
         raft.start();
         refreshStatus();
@@ -273,6 +275,32 @@ public final class NodeRuntime implements AutoCloseable {
             }
         }));
         return future;
+    }
+
+    /**
+     * Adds ({@code add}) or removes one voting member on this node, which must be the leader. Completes like a
+     * write; completes exceptionally with IllegalArgumentException for an invalid change.
+     */
+    public CompletableFuture<Outcomes.Proposal> changeMembership(boolean add, String specOrId) {
+        CompletableFuture<Outcomes.Proposal> future = new CompletableFuture<>();
+        nodeThread.execute(() -> safely(() -> {
+            if (crashed || raft == null) {
+                future.complete(new Outcomes.Proposal(Outcomes.Status.NOT_LEADER, 0, 0, null, null));
+                return;
+            }
+            try {
+                if (add) raft.addMember(specOrId, future::complete);
+                else raft.removeMember(specOrId, future::complete);
+            } catch (IllegalArgumentException e) {
+                future.completeExceptionally(e);
+            }
+        }));
+        return future;
+    }
+
+    /** Current voting members (specs) according to this node's log. */
+    public List<String> members() {
+        return call(() -> raft == null ? List.<String>of() : raft.members());
     }
 
     // =====================================================================================

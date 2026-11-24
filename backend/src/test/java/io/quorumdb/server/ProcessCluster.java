@@ -32,6 +32,7 @@ final class ProcessCluster implements AutoCloseable {
 
     private final Path dir;
     private final int size;
+    private int initial; // nodes n1..n{initial} form the starting cluster; later ones join it
     private final int[] httpPorts;
     private final int[] grpcPorts;
     private final Map<String, Process> processes = new LinkedHashMap<>();
@@ -41,6 +42,7 @@ final class ProcessCluster implements AutoCloseable {
     ProcessCluster(Path dir, int size) throws IOException {
         this.dir = dir;
         this.size = size;
+        this.initial = size;
         this.httpPorts = new int[size + 1];
         this.grpcPorts = new int[size + 1];
         for (int i = 1; i <= size; i++) {
@@ -50,16 +52,31 @@ final class ProcessCluster implements AutoCloseable {
     }
 
     static ProcessCluster start(Path dir, int size) throws Exception {
+        return start(dir, size, size);
+    }
+
+    /**
+     * Reserves ports for {@code size} nodes but starts only n1..n{initial} as the cluster. The others can be
+     * started later with {@link #startNode}; they run with {@code quorumdb.join=true} and wait to be added.
+     */
+    static ProcessCluster start(Path dir, int size, int initial) throws Exception {
         ProcessCluster c = new ProcessCluster(dir, size);
-        for (int i = 1; i <= size; i++) c.startNode("n" + i);
-        for (int i = 1; i <= size; i++) c.awaitHttp("n" + i);
+        c.initial = initial;
+        for (int i = 1; i <= initial; i++) c.startNode("n" + i);
+        for (int i = 1; i <= initial; i++) c.awaitHttp("n" + i);
         return c;
+    }
+
+    /** Body for {@code POST /api/v1/members} that adds node {@code id}. */
+    Map<String, String> memberBody(String id) {
+        int i = Integer.parseInt(id.substring(1));
+        return Map.of("id", id, "raftAddress", "localhost:" + grpcPorts[i], "httpUrl", "http://localhost:" + httpPorts[i]);
     }
 
     void startNode(String id) throws IOException {
         int i = Integer.parseInt(id.substring(1));
         StringBuilder peers = new StringBuilder();
-        for (int j = 1; j <= size; j++) {
+        for (int j = 1; j <= initial; j++) {
             if (j == i) continue;
             if (!peers.isEmpty()) peers.append(',');
             peers.append("n").append(j).append("=localhost:").append(grpcPorts[j]).append("=http://localhost:").append(httpPorts[j]);
@@ -71,7 +88,7 @@ final class ProcessCluster implements AutoCloseable {
                 "--server.port=" + httpPorts[i], "--quorumdb.node-id=" + id, "--quorumdb.grpc-port=" + grpcPorts[i],
                 "--quorumdb.data-dir=" + dir.resolve("data").resolve(id), "--quorumdb.peers=" + peers,
                 "--quorumdb.advertised-http=http://localhost:" + httpPorts[i], "--quorumdb.admin-token=" + TOKEN,
-                "--quorumdb.request-timeout-ms=3000"));
+                "--quorumdb.request-timeout-ms=3000", "--quorumdb.join=" + (i > initial)));
         Process p = new ProcessBuilder(cmd).redirectErrorStream(true)
                 .redirectOutput(ProcessBuilder.Redirect.appendTo(dir.resolve(id + ".log").toFile())).start();
         processes.put(id, p);
