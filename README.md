@@ -118,7 +118,14 @@ them needs a restart.
 | `GET /api/v1/metrics` · `/cluster/metrics` · `/metrics/prometheus` | Throughput, latency percentiles, Prometheus format. |
 | `GET /api/v1/events` · `/cluster/events` · `/operations` · `/config` | History and configuration. |
 | `POST/DELETE/GET /api/v1/faults` | Live fault injection (admin token). |
+| `GET /api/v1/members` · `POST /api/v1/members` · `DELETE /api/v1/members/{id}` | Voting members; add `{"id","raftAddress","httpUrl"}` or remove one node (admin token, send to the leader). See below. |
 | `/api/v1/faultlab/...` | Scenarios, simulated runs, replay, compare, export, live experiments. |
+
+**Adding a node.** Start it with `--quorumdb.join=true` and `--quorumdb.peers` listing the current members
+(it then stays a non-voter and does not campaign), then on the leader:
+`curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' localhost:8081/api/v1/members -d '{"id":"n4","raftAddress":"host4:9104","httpUrl":"http://host4:8084"}'`.
+**Removing a node** (the leader included): `DELETE /api/v1/members/n2` on the leader. A follower answers
+`503 NOT_LEADER` with `leaderHint`. A second change while one is uncommitted gets `429 BUSY`.
 
 Idempotent retries: send `X-Client-Id` and `X-Request-Seq`; the same pair is never applied twice. Errors use
 one shape: `{"error": "NO_LEADER", "message": "...", "node": "n2", "leaderHint": "n1"}`. Exact guarantees:
@@ -200,7 +207,11 @@ network that only trusted clients can reach.
 
 ## Known limitations
 
-- **Fixed membership.** No joint consensus or single-server membership changes.
+- **Membership changes are single-server.** One node is added or removed at a time, with no
+  joint consensus. An added node votes immediately, without a catch-up (learner) phase, so let it catch up
+  before relying on the larger cluster's fault tolerance. FaultLab's simulator does not exercise membership
+  changes. `scripts/cluster.sh` and Docker Compose start fixed clusters. A removed node keeps running idle
+  until you stop it.
 - **TLS is optional and off by default** (see [TLS](#tls)). Without it the Raft and client ports are plaintext and
   unauthenticated. Even with it, clients are not authenticated: any client that can reach the HTTPS port can read and
   write. The admin token only guards fault injection.

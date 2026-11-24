@@ -1,7 +1,8 @@
 # Consistency model
 
-This document states exactly what a client can rely on. It covers a cluster of `N` voting nodes with fixed
-membership and a quorum of `⌊N/2⌋ + 1`.
+This document states exactly what a client can rely on. It covers a cluster of `N` voting nodes and a quorum
+of `⌊N/2⌋ + 1`. Membership can change one server at a time (`/api/v1/members`); every guarantee below holds
+across such changes, with `N` the size of the configuration in effect.
 
 ## Assumptions
 

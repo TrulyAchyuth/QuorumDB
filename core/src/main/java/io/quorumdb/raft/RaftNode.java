@@ -15,6 +15,7 @@ import io.quorumdb.raft.RaftMessage.RequestVote;
 import io.quorumdb.raft.RaftMessage.RequestVoteReply;
 import io.quorumdb.storage.RaftStorage;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -32,7 +33,7 @@ import java.util.function.Consumer;
  * Algorithm", extended version). Implements leader election (§5.2), log replication (§5.3), the
  * election restriction and current-term commit rule (§5.4), snapshots/InstallSnapshot (§7),
  * linearizable reads via ReadIndex (§8 / thesis §6.4) and the PreVote + CheckQuorum extensions
- * (thesis §9.6, §6.2).
+ * (thesis §9.6, §6.2) and single-server membership changes (dissertation §4.1).
  *
  * <p>This class holds the node's state, the client-facing operations (proposals, ReadIndex reads),
  * message dispatch and commit/apply. The protocol logic lives in package-private helpers that operate on
@@ -136,6 +137,15 @@ public final class RaftNode {
     long termStartIndex;
     long readSeq;
 
+    // Membership (dissertation §4.1): the latest configuration in the log is used as soon as it is appended.
+    // Each member is a spec: its id, optionally followed by '=' and how to reach it (opaque to Raft).
+    private List<String> members = List.of();
+    Set<String> voters = Set.of();
+    private final Set<String> known = new LinkedHashSet<>(); // every id in any configuration this node has held
+    private long membersIndex;                 // index of the CONFIG entry that defined it; 0 = snapshot or initial
+    List<String> snapshotMembers;      // configuration covered by the snapshot
+    List<String> appliedMembers;       // configuration as of lastApplied, saved with the next snapshot
+
     public RaftNode(RaftConfig cfg, RaftStorage storage, StateMachine stateMachine, Transport transport,
                     Scheduler scheduler, RandomSource random, EventListener listener) {
         this.cfg = cfg;
@@ -146,6 +156,11 @@ public final class RaftNode {
         this.scheduler = scheduler;
         this.random = random;
         this.listener = listener == null ? EventListener.NONE : listener;
+        this.snapshotMembers = cfg.initialMembers();
+        this.appliedMembers = snapshotMembers;
+        this.members = snapshotMembers;
+        this.voters = idsOf(snapshotMembers);
+        this.known.addAll(voters);
         this.elections = new Elections(this);
         this.replication = new Replication(this);
         this.snapshots = new Snapshots(this);
@@ -163,8 +178,10 @@ public final class RaftNode {
             emit(RaftEvent.Type.NODE_STARTED, 0, 0, 0, null, "cluster=" + cfg.clusterSize());
             byte[] snapshot = storage.loadSnapshot();
             if (snapshot != null) {
-                stateMachine.restore(snapshot);
+                stateMachine.restore(snapshots.unwrapSnapshot(snapshot));
             }
+            appliedMembers = snapshotMembers;
+            refreshMembers();
             // Everything in the snapshot is committed and applied; the rest of the log is
             // re-committed by the protocol (commitIndex is volatile, Raft Figure 2).
             commitIndex = storage.snapshotIndex();
@@ -257,6 +274,63 @@ public final class RaftNode {
     }
 
     /**
+     * Adds one voting member (single-server change). {@code spec} is the member id, optionally followed by
+     * {@code =} and how to reach it. The callback fires once the configuration entry is committed, like a proposal.
+     *
+     * @throws IllegalArgumentException if the id is invalid or already a member
+     */
+    public void addMember(String spec, Consumer<Outcomes.Proposal> callback) {
+        String newId = memberId(spec);
+        if (newId.isBlank() || spec.contains("\n")) throw new IllegalArgumentException("invalid member '" + spec + "'");
+        if (voters.contains(newId)) throw new IllegalArgumentException(newId + " is already a member");
+        List<String> next = new ArrayList<>(members);
+        next.add(spec);
+        changeMembers(next, callback);
+    }
+
+    /**
+     * Removes one voting member (single-server change), possibly this leader itself, which then steps down once
+     * the change is committed.
+     *
+     * @throws IllegalArgumentException if {@code memberId} is not a member or is the last one
+     */
+    public void removeMember(String memberId, Consumer<Outcomes.Proposal> callback) {
+        if (!voters.contains(memberId)) throw new IllegalArgumentException(memberId + " is not a member");
+        if (voters.size() == 1) throw new IllegalArgumentException("cannot remove the last member");
+        List<String> next = new ArrayList<>();
+        for (String m : members) if (!memberId(m).equals(memberId)) next.add(m);
+        changeMembers(next, callback);
+    }
+
+    private void changeMembers(List<String> next, Consumer<Outcomes.Proposal> callback) {
+        if (!running || role != Role.LEADER) {
+            callback.accept(new Outcomes.Proposal(Status.NOT_LEADER, 0, 0, null, leaderHint()));
+            return;
+        }
+        // One change at a time, and only after this leader has committed an entry of its own term: otherwise two
+        // overlapping single-server changes could produce disjoint majorities (dissertation §4.1 and its erratum).
+        if (membersIndex > commitIndex || commitIndex < termStartIndex) {
+            callback.accept(new Outcomes.Proposal(Status.BUSY, 0, 0, null, id));
+            return;
+        }
+        guarded(() -> {
+            LogEntry entry = new LogEntry(storage.lastIndex() + 1, storage.currentTerm(), LogEntry.Type.CONFIG,
+                    encodeMembers(next));
+            pending.put(entry.index(), new PendingProposal(entry.term(), callback));
+            storage.append(List.of(entry));
+            emitAppended(List.of(entry), "membership change");
+            setMembers(next, entry.index());
+            replication.broadcastAppend(false);
+            replication.advanceCommitIndex();
+        });
+    }
+
+    /** Current voting members (specs), from the latest configuration in this node's log. */
+    public List<String> members() {
+        return members;
+    }
+
+    /**
      * Linearizable read barrier (ReadIndex). The callback fires with {@link Status#OK} once (a) this
      * node has confirmed, via a round of heartbeats acknowledged by a majority <em>after</em> this call,
      * that it is still the leader, and (b) the state machine has applied everything committed at the
@@ -292,12 +366,12 @@ public final class RaftNode {
 
     /** Highest read sequence acknowledged by a majority (the leader counts itself). */
     private long confirmedReadSeq() {
-        long[] acked = new long[progress.size() + 1];
+        long[] acked = new long[voters.size()];
         int i = 0;
         for (Progress p : progress.values()) acked[i++] = p.ackedReadSeq;
-        acked[i] = readSeq;
+        if (voters.contains(id)) acked[i] = readSeq;
         Arrays.sort(acked);
-        return acked[acked.length - cfg.quorum()];
+        return acked[acked.length - quorum()];
     }
 
     void serveReads() {
@@ -367,8 +441,14 @@ public final class RaftNode {
     /** Entry point for every message delivered by the transport. */
     public void handle(RaftMessage message) {
         if (!running) return;
-        if (message == null || message.from() == null || !cfg.peers().contains(message.from()) || message.term() < 0) {
-            return; // not a member of this cluster's configuration, or malformed: ignore
+        if (message == null || message.from() == null || !known.contains(message.from()) || message.from().equals(id)
+                || message.term() < 0) {
+            return; // never in any configuration this node has seen, or malformed: ignore
+        }
+        // Former members are still heard (dissertation §4.1): a leader that is removing itself must be able to
+        // replicate its removal. Only elections are restricted to the current voters.
+        if ((message instanceof RequestVote || message instanceof RequestVoteReply) && !voters.contains(message.from())) {
+            return; // a removed or not-yet-added node can neither disrupt nor decide an election
         }
         guarded(() -> {
             switch (message) {
@@ -400,6 +480,7 @@ public final class RaftNode {
         while (lastApplied < commitIndex) {
             LogEntry e = storage.entry(lastApplied + 1);
             byte[] result = e.type() == LogEntry.Type.COMMAND ? stateMachine.apply(e) : null;
+            if (e.type() == LogEntry.Type.CONFIG) appliedMembers = decodeMembers(e.data());
             lastApplied = e.index();
             emit(RaftEvent.Type.ENTRY_APPLIED, e.index(), e.term(), e.checksum(), null, null);
             PendingProposal proposal = pending.remove(e.index());
@@ -410,6 +491,11 @@ public final class RaftNode {
         }
         if (cfg.snapshotThreshold() > 0 && lastApplied - storage.snapshotIndex() >= cfg.snapshotThreshold()) {
             snapshots.snapshotNow();
+        }
+        if (role == Role.LEADER && !voters.contains(id) && membersIndex <= commitIndex) {
+            // Our own removal is committed: hand over by stepping down (dissertation §4.2.2).
+            elections.becomeFollower(storage.currentTerm(), null, "removed from the cluster configuration");
+            return;
         }
         serveReads();
     }
@@ -422,6 +508,79 @@ public final class RaftNode {
     public void takeSnapshot() {
         if (!running || lastApplied <= storage.snapshotIndex()) return;
         guarded(snapshots::snapshotNow);
+    }
+
+    // =====================================================================================
+    // Membership (dissertation §4.1)
+    // =====================================================================================
+
+    int quorum() {
+        return voters.size() / 2 + 1;
+    }
+
+    List<String> otherVoters() {
+        List<String> out = new ArrayList<>(voters);
+        out.remove(id);
+        return out;
+    }
+
+    static String memberId(String spec) {
+        int eq = spec.indexOf('=');
+        return (eq < 0 ? spec : spec.substring(0, eq)).trim();
+    }
+
+    private static Set<String> idsOf(List<String> specs) {
+        Set<String> ids = new LinkedHashSet<>();
+        for (String s : specs) ids.add(memberId(s));
+        // Insertion-ordered on purpose: peers are messaged in configuration order, which keeps the simulator
+        // deterministic (Set.copyOf iterates in a per-JVM random order).
+        return java.util.Collections.unmodifiableSet(ids);
+    }
+
+    static byte[] encodeMembers(List<String> specs) {
+        return String.join("\n", specs).getBytes(StandardCharsets.UTF_8);
+    }
+
+    static List<String> decodeMembers(byte[] data) {
+        List<String> out = new ArrayList<>();
+        for (String line : new String(data, StandardCharsets.UTF_8).split("\n")) {
+            if (!line.isBlank()) out.add(line);
+        }
+        return List.copyOf(out);
+    }
+
+    /** Switches to a configuration; on the leader, starts or stops replicating to the members that changed. */
+    void setMembers(List<String> specs, long index) {
+        boolean changed = !specs.equals(members);
+        members = List.copyOf(specs);
+        voters = idsOf(members);
+        known.addAll(voters);
+        membersIndex = index;
+        if (role == Role.LEADER) {
+            long now = scheduler.nowMs();
+            progress.keySet().retainAll(voters);
+            for (String peer : otherVoters()) {
+                progress.computeIfAbsent(peer, k -> {
+                    Progress p = new Progress();
+                    p.nextIndex = storage.lastIndex() + 1;
+                    p.lastAckMs = now;
+                    return p;
+                });
+            }
+        }
+        if (changed) emit(RaftEvent.Type.MEMBERSHIP_CHANGED, index, 0, 0, null, "voters=" + voters.stream().sorted().toList());
+    }
+
+    /** Recomputes the configuration from the latest CONFIG entry in the log, or the snapshot's. */
+    void refreshMembers() {
+        for (long i = storage.lastIndex(); i > storage.snapshotIndex(); i--) {
+            LogEntry e = storage.entry(i);
+            if (e.type() == LogEntry.Type.CONFIG) {
+                setMembers(decodeMembers(e.data()), i);
+                return;
+            }
+        }
+        setMembers(snapshotMembers, 0);
     }
 
     // =====================================================================================

@@ -81,9 +81,23 @@ does all four.
 | Torn final WAL record after crash | Discarded on recovery (it was never acknowledged) |
 | Any other WAL corruption | Startup refuses with `StorageException.Corrupted` |
 
+**Membership changes (dissertation §4.1, single-server).** A `CONFIG` log entry holds the complete new set of
+voters. Every node uses the latest configuration in its log as soon as the entry is appended, committed or not,
+and recomputes it when a truncation removes that entry. Commit, ReadIndex, CheckQuorum and elections count only
+the current voters, and a leader that is removing itself does not count itself. The leader accepts a change
+only if no other change is uncommitted *and* it has committed an entry of its own term. The second rule is the
+fix for the known single-server-change bug, where two overlapping changes from different leaders could produce
+disjoint majorities. A leader steps down once its own removal commits. A node that is not a voter never
+campaigns. Nodes keep processing messages from former members, so a leader can replicate its own removal, but
+votes to or from non-members are ignored, and nodes that were never in any configuration are ignored entirely.
+Snapshots store the configuration as of their index, but only once it differs from the initial one, so
+snapshots of clusters that never changed membership keep their old format.
+
 ## Deliberately not implemented
 
-- **Membership changes.** Joint consensus is required for correctness and is substantial work.
+- **Joint consensus** (arbitrary multi-server changes in one step). Changes are made one server at a time.
+- **Learners / catch-up before voting.** An added server votes at once. Until it has caught up it cannot help
+  form a majority, so adding one to a 3-node cluster leaves a 4-node cluster that needs 3 up-to-date nodes.
 - **Leader leases** (clock-based reads). ReadIndex is used instead because it does not depend on bounded clock drift.
 - **Pipelined AppendEntries, chunked snapshots, an asynchronous storage thread.** These are performance
   work; see the future work list in [docs/HANDOVER.md](docs/HANDOVER.md).

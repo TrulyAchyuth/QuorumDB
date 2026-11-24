@@ -4,10 +4,18 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
-/** Validated static cluster membership, parsed from {@link NodeProperties}. */
-public record ClusterConfig(String clusterId, Member self, Map<String, Member> peers) {
+/**
+ * Validated cluster membership. Starts from {@link NodeProperties} and follows the Raft configuration after
+ * membership changes ({@link #updateMembers}); {@code peers} is a concurrent map for that reason.
+ *
+ * @param peers     the other current members
+ * @param addresses every other node this one has known, including removed members, so the transport can still
+ *                  reach a node that is being removed (it keeps replicating until its removal commits)
+ */
+public record ClusterConfig(String clusterId, Member self, Map<String, Member> peers, Map<String, Member> addresses) {
 
     /** One cluster member and how to reach it. */
     public record Member(String id, String raftAddress, String httpBaseUrl) {}
@@ -28,17 +36,44 @@ public record ClusterConfig(String clusterId, Member self, Map<String, Member> p
         Map<String, Member> peers = new LinkedHashMap<>();
         for (String spec : p.peers().split(",")) {
             if (spec.isBlank()) continue;
-            String[] parts = spec.trim().split("=", 3);
-            require(parts.length == 3, "peer '" + spec + "' must look like id=host:grpcPort=http://host:port");
-            require(ID.matcher(parts[0]).matches(), "invalid peer id '" + parts[0] + "'");
-            require(HOST_PORT.matcher(parts[1]).matches(), "invalid raft address '" + parts[1] + "'");
-            require(parts[2].startsWith("http://") || parts[2].startsWith("https://"), "invalid http url '" + parts[2] + "'");
-            require(!parts[0].equals(p.nodeId()), "peers must not include this node (" + p.nodeId() + ")");
-            require(peers.put(parts[0], new Member(parts[0], parts[1], stripSlash(parts[2]))) == null,
-                    "duplicate peer id '" + parts[0] + "'");
+            Member m = parseMember(spec.trim());
+            require(!m.id().equals(p.nodeId()), "peers must not include this node (" + p.nodeId() + ")");
+            require(peers.put(m.id(), m) == null, "duplicate peer id '" + m.id() + "'");
         }
         Member self = new Member(p.nodeId(), "localhost:" + p.grpcPort(), stripSlash(p.advertisedHttp()));
-        return new ClusterConfig(p.clusterId(), self, Map.copyOf(peers));
+        return new ClusterConfig(p.clusterId(), self, new ConcurrentHashMap<>(peers), new ConcurrentHashMap<>(peers));
+    }
+
+    /** Parses and validates {@code id=host:grpcPort=http(s)://host:port}. */
+    public static Member parseMember(String spec) {
+        String[] parts = spec.split("=", 3);
+        require(parts.length == 3, "member '" + spec + "' must look like id=host:grpcPort=http://host:port");
+        require(ID.matcher(parts[0]).matches(), "invalid member id '" + parts[0] + "'");
+        require(HOST_PORT.matcher(parts[1]).matches(), "invalid raft address '" + parts[1] + "'");
+        require(parts[2].startsWith("http://") || parts[2].startsWith("https://"), "invalid http url '" + parts[2] + "'");
+        return new Member(parts[0], parts[1], stripSlash(parts[2]));
+    }
+
+    /** The spec Raft stores for a member in a configuration entry. */
+    public static String spec(Member m) {
+        return m.id() + "=" + m.raftAddress() + "=" + m.httpBaseUrl();
+    }
+
+    /**
+     * Follows a new Raft configuration (member specs, see {@code RaftNode.members()}). Members given by id only
+     * keep the address configured at start-up; members the configuration no longer contains are dropped.
+     */
+    public void updateMembers(List<String> specs) {
+        Map<String, Member> next = new LinkedHashMap<>();
+        for (String spec : specs) {
+            String id = spec.contains("=") ? spec.substring(0, spec.indexOf('=')) : spec;
+            if (id.equals(self.id())) continue;
+            Member m = spec.contains("=") ? parseMember(spec) : peers.get(id);
+            if (m != null) next.put(id, m);
+        }
+        addresses.putAll(next);
+        peers.keySet().retainAll(next.keySet());
+        peers.putAll(next);
     }
 
     public List<String> peerIds() {
@@ -55,6 +90,11 @@ public record ClusterConfig(String clusterId, Member self, Map<String, Member> p
 
     public Member member(String id) {
         return id.equals(self.id()) ? self : peers.get(id);
+    }
+
+    /** How to reach another node, current member or not; null if this node never knew it. */
+    public Member address(String id) {
+        return addresses.get(id);
     }
 
     public int size() {

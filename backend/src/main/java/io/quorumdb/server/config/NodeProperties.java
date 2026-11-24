@@ -18,6 +18,8 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * @param tlsCert       PEM certificate chain this node presents on the Raft port and to peers; empty = no TLS
  * @param tlsKey        PEM (PKCS#8) private key for {@code tlsCert}
  * @param tlsCa         PEM CA certificate(s) that peers' certificates must be signed by
+ * @param join          this node is being added to a running cluster whose current members are {@code peers};
+ *                      it does not vote until the leader's membership change adds it
  */
 @ConfigurationProperties("quorumdb")
 public record NodeProperties(
@@ -42,5 +44,6 @@ public record NodeProperties(
         @DefaultValue("1000") long snapshotTrailingEntries,
         @DefaultValue("") String tlsCert,
         @DefaultValue("") String tlsKey,
-        @DefaultValue("") String tlsCa) {
+        @DefaultValue("") String tlsCa,
+        @DefaultValue("false") boolean join) {
 }

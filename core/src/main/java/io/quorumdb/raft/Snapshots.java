@@ -10,8 +10,11 @@ import io.quorumdb.raft.RaftNode.Role;
 import io.quorumdb.storage.RaftStorage;
 
 import java.io.ByteArrayOutputStream;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Snapshots and log compaction (Raft §7): taking a local snapshot, sending one to a follower that needs
@@ -19,6 +22,8 @@ import java.util.List;
  * {@link RaftNode}, on the node thread only.
  */
 final class Snapshots {
+    private static final byte[] MEMBERS_MAGIC = "QDBMEMB1".getBytes(StandardCharsets.US_ASCII);
+
     private final RaftNode n;
     private final RaftConfig cfg;
     private final String id;
@@ -47,7 +52,7 @@ final class Snapshots {
     void snapshotNow() {
         long index = n.lastApplied;
         long term = storage.termAt(index);
-        byte[] data = n.stateMachine.snapshot();
+        byte[] data = wrapSnapshot(n.stateMachine.snapshot());
         storage.saveSnapshot(index, term, data, cfg.snapshotTrailingEntries());
         n.emit(RaftEvent.Type.SNAPSHOT_CREATED, index, term, 0, null, data.length + " bytes");
     }
@@ -120,9 +125,11 @@ final class Snapshots {
             byte[] data = assembleSnapshot(m);
             if (data == null) return; // more chunks to come, or this one was out of order
             storage.installSnapshot(m.lastIncludedIndex(), m.lastIncludedTerm(), data);
-            n.stateMachine.restore(data);
+            n.stateMachine.restore(unwrapSnapshot(data)); // the reassembled snapshot, not one chunk
             n.commitIndex = m.lastIncludedIndex();
             n.lastApplied = m.lastIncludedIndex();
+            n.appliedMembers = n.snapshotMembers;
+            n.refreshMembers();
             n.emit(RaftEvent.Type.SNAPSHOT_INSTALLED, m.lastIncludedIndex(), m.lastIncludedTerm(), 0, m.from(),
                     data.length + " bytes");
         }
@@ -164,5 +171,33 @@ final class Snapshots {
         byte[] data = receiving.toByteArray();
         receiving = null;
         return data;
+    }
+
+    /**
+     * The snapshot stores the configuration as of its index, but only once it differs from the initial one, so
+     * snapshots of clusters that never changed membership keep their old format.
+     */
+    byte[] wrapSnapshot(byte[] stateMachineSnapshot) {
+        if (Set.copyOf(n.appliedMembers).equals(Set.copyOf(cfg.initialMembers()))) return stateMachineSnapshot;
+        byte[] config = RaftNode.encodeMembers(n.appliedMembers);
+        return ByteBuffer.allocate(MEMBERS_MAGIC.length + 4 + config.length + stateMachineSnapshot.length)
+                .put(MEMBERS_MAGIC).putInt(config.length).put(config).put(stateMachineSnapshot).array();
+    }
+
+    /** Sets {@link RaftNode#snapshotMembers} from a snapshot and returns the state machine's part of it. */
+    byte[] unwrapSnapshot(byte[] data) {
+        if (data.length < MEMBERS_MAGIC.length + 4
+                || !Arrays.equals(data, 0, MEMBERS_MAGIC.length, MEMBERS_MAGIC, 0, MEMBERS_MAGIC.length)) {
+            n.snapshotMembers = cfg.initialMembers();
+            return data;
+        }
+        ByteBuffer buf = ByteBuffer.wrap(data);
+        buf.position(MEMBERS_MAGIC.length);
+        int length = buf.getInt();
+        if (length < 0 || length > buf.remaining()) throw new IllegalStateException("corrupt snapshot membership header");
+        byte[] config = new byte[length];
+        buf.get(config);
+        n.snapshotMembers = RaftNode.decodeMembers(config);
+        return Arrays.copyOfRange(data, buf.position(), data.length);
     }
 }

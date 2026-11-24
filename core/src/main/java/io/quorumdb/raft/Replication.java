@@ -41,13 +41,13 @@ final class Replication {
         n.guarded(() -> {
             long now = scheduler.nowMs();
             if (cfg.checkQuorum()) {
-                int active = 1;
+                int active = n.voters.contains(id) ? 1 : 0;
                 for (Progress p : n.progress.values()) {
                     if (now - p.lastAckMs < cfg.electionTimeoutMaxMs()) active++;
                 }
-                if (active < cfg.quorum()) {
+                if (active < n.quorum()) {
                     n.elections.becomeFollower(storage.currentTerm(), null,
-                            "check-quorum: heard from only " + active + "/" + cfg.clusterSize() + " nodes");
+                            "check-quorum: heard from only " + active + "/" + n.voters.size() + " nodes");
                     return;
                 }
             }
@@ -146,12 +146,13 @@ final class Replication {
      */
     void advanceCommitIndex() {
         if (n.role != Role.LEADER) return;
-        long[] match = new long[n.progress.size() + 1];
+        long[] match = new long[n.voters.size()];
         int i = 0;
         for (Progress p : n.progress.values()) match[i++] = p.matchIndex;
-        match[i] = storage.durableIndex(); // the leader's own copy counts only once it is durable
+        // A leader that is removing itself does not count; otherwise its own copy counts only once durable.
+        if (n.voters.contains(id)) match[i] = storage.durableIndex();
         Arrays.sort(match);
-        long majorityIndex = match[match.length - cfg.quorum()];
+        long majorityIndex = match[match.length - n.quorum()];
         if (majorityIndex > n.commitIndex && storage.termAt(majorityIndex) == storage.currentTerm()) {
             n.setCommitIndex(majorityIndex);
             // Let idle followers learn the new commit index without waiting for the next heartbeat.
@@ -214,6 +215,7 @@ final class Replication {
                         "removing [" + e.index() + ", " + storage.lastIndex() + "] conflicting with leader");
                 storage.truncateSuffix(e.index());
                 n.awaitingAckIndex = Math.min(n.awaitingAckIndex, e.index() - 1);
+                n.refreshMembers(); // the removed suffix may have held the latest configuration
                 break;
             }
             firstNew++;
@@ -222,6 +224,13 @@ final class Replication {
             List<LogEntry> toAppend = entries.subList(firstNew, entries.size());
             storage.append(toAppend); // durable before we acknowledge
             n.emitAppended(toAppend, "from leader");
+            for (int k = toAppend.size() - 1; k >= 0; k--) {
+                LogEntry e = toAppend.get(k);
+                if (e.type() == LogEntry.Type.CONFIG) {
+                    n.setMembers(RaftNode.decodeMembers(e.data()), e.index());
+                    break;
+                }
+            }
         }
         if (m.leaderCommit() > n.commitIndex) {
             // Only up to the last entry verified to match the leader, never our unverified suffix.

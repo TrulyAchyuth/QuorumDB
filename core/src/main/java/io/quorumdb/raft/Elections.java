@@ -41,6 +41,10 @@ final class Elections {
 
     private void onElectionTimeout() {
         if (!n.running || n.role == Role.LEADER) return;
+        if (!n.voters.contains(id)) { // not (or no longer) a voting member: never campaign
+            resetElectionTimer();
+            return;
+        }
         n.guarded(() -> {
             n.emit(RaftEvent.Type.ELECTION_TIMEOUT, 0, 0, 0, n.leaderId, "no leader contact within election timeout");
             n.leaderId = null;
@@ -66,12 +70,12 @@ final class Elections {
             n.emit(RaftEvent.Type.ELECTION_STARTED, storage.lastIndex(), n.lastLogTerm(), 0, null, null);
         }
         resetElectionTimer();
-        if (n.votes.size() >= cfg.quorum()) {
+        if (n.votes.size() >= n.quorum()) {
             wonRound(preVote);
             return;
         }
         RequestVote request = new RequestVote(id, campaignTerm, storage.lastIndex(), n.lastLogTerm(), preVote);
-        for (String peer : cfg.peers()) {
+        for (String peer : n.otherVoters()) {
             n.emit(RaftEvent.Type.VOTE_REQUESTED, storage.lastIndex(), n.lastLogTerm(), 0, peer, preVote ? "pre-vote" : null);
             transport.send(peer, request);
         }
@@ -140,7 +144,7 @@ final class Elections {
                 ? n.role == Role.PRE_CANDIDATE && m.requestTerm() == storage.currentTerm() + 1
                 : n.role == Role.CANDIDATE && m.requestTerm() == storage.currentTerm();
         if (!forCurrentRound || !m.granted()) return;
-        if (n.votes.add(m.from()) && n.votes.size() >= cfg.quorum()) {
+        if (n.votes.add(m.from()) && n.votes.size() >= n.quorum()) {
             wonRound(m.preVote());
         }
     }
@@ -176,7 +180,7 @@ final class Elections {
         n.electionTimer = null;
         long now = scheduler.nowMs();
         n.progress.clear();
-        for (String peer : cfg.peers()) {
+        for (String peer : n.otherVoters()) {
             Progress p = new Progress();
             p.nextIndex = storage.lastIndex() + 1;
             p.lastAckMs = now; // grace period for CheckQuorum
