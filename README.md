@@ -27,7 +27,8 @@ is not comparable with the benchmarks below: fsync there is much cheaper than on
 | Benchmarks | Closed-loop load generator, 1/3/5-node matrix, read consistency levels, fault runs, before/after snapshot experiment | [docs/evidence/benchmarks.md](docs/evidence/benchmarks.md), [BENCHMARKS.md](BENCHMARKS.md#snapshot-storm-investigation) |
 | Deployment | Docker Compose: 3 nodes on fixed addresses + dashboard (nginx) + optional Prometheus | `scripts/verify_docker.py`, also in CI; [docs/evidence/docker.md](docs/evidence/docker.md) |
 
-Latest full run (2026-11-14): `./gradlew test :backend:integrationTest`, **171 tests, all passed**; frontend
+Latest full run (2026-11-14): `./gradlew test :backend:integrationTest`, **171 tests, all passed**. The count
+includes parameterized and property-based (jqwik) cases, so it is larger than the number of `@Test` methods; frontend
 `npm test`, **16 passed**. Exact counts per suite: [docs/evidence/test-summary.md](docs/evidence/test-summary.md).
 
 ## Quick start
