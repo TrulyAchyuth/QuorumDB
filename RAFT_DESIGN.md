@@ -4,6 +4,11 @@
 *In Search of an Understandable Consensus Algorithm* (extended version), plus three extensions from
 Ongaro's thesis: PreVote, CheckQuorum (leader stickiness) and ReadIndex reads.
 
+`RaftNode` holds the node's state, proposals, ReadIndex reads, message dispatch and commit/apply. The
+protocol logic is split into package-private helpers that operate on that state, all on the node thread:
+`Elections` (PreVote, votes, role changes), `Replication` (AppendEntries on both sides, the commit rule,
+CheckQuorum) and `Snapshots` (taking, sending and installing snapshots).
+
 ## State
 
 | Persistent (before replying) | Volatile | Leader only |
