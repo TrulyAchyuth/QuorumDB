@@ -4,6 +4,7 @@ import io.quorumdb.raft.Outcomes.Status;
 import io.quorumdb.raft.RaftMessage.AppendEntries;
 import io.quorumdb.raft.RaftMessage.AppendEntriesReply;
 import io.quorumdb.raft.RaftMessage.InstallSnapshot;
+import io.quorumdb.raft.RaftMessage.InstallSnapshotReply;
 import io.quorumdb.raft.RaftNode.Role;
 import io.quorumdb.storage.MemoryStorage;
 import org.junit.jupiter.api.Test;
@@ -315,7 +316,7 @@ class RaftReplicationTest {
 
     @Test
     void slightlyBehindFollowerIsSentEntriesFromTheTailInsteadOfTheSnapshot() {
-        RaftHarness h = new RaftHarness(3, false, false, 6, new MemoryStorage(), 3);
+        RaftHarness h = new RaftHarness(3, false, false, 6, new MemoryStorage(), 3, 1 << 20);
         h.electLeader();
         for (int i = 0; i < 6; i++) h.node.propose(("c" + i).getBytes(), r -> { });
         h.ack("n3", 5);  // n3 has 1..5
@@ -334,7 +335,7 @@ class RaftReplicationTest {
 
     @Test
     void followerBehindTheTailStillGetsTheSnapshot() {
-        RaftHarness h = new RaftHarness(3, false, false, 6, new MemoryStorage(), 3);
+        RaftHarness h = new RaftHarness(3, false, false, 6, new MemoryStorage(), 3, 1 << 20);
         h.electLeader();
         for (int i = 0; i < 6; i++) h.node.propose(("c" + i).getBytes(), r -> { });
         h.ack("n2", 7); // snapshot through 7, tail 5..7; n3 has nothing
@@ -378,6 +379,56 @@ class RaftReplicationTest {
         h.node.propose("after".getBytes(), r -> { });
         assertThat(h.lastSent(AppendEntries.class, "n3").prevLogIndex()).isEqualTo(7);
         assertThat(h.sent(InstallSnapshot.class)).hasSize(2);
+    }
+
+    @Test
+    void largeSnapshotIsSentInChunksOneAtATime() {
+        RaftHarness h = new RaftHarness(3, false, false, 5, new MemoryStorage(), 0, 4);
+        h.electLeader();
+        for (int i = 0; i < 6; i++) h.node.propose(("c" + i).getBytes(), r -> { });
+        h.outbox.clear();
+        h.ack("n2", 7); // snapshot "c0,c1,c2,c3,c4,c5" (17 bytes) through 7; n3 has nothing, so its transfer starts
+        h.receive(new AppendEntriesReply("n3", 1, false, 0, 1, 0, 0)); // n3 answers a heartbeat: no second chunk
+
+        java.io.ByteArrayOutputStream received = new java.io.ByteArrayOutputStream();
+        for (int chunk = 0; ; chunk++) {
+            List<InstallSnapshot> sent = h.sent(InstallSnapshot.class);
+            assertThat(sent).as("one chunk in flight at a time").hasSize(1);
+            InstallSnapshot c = sent.get(0);
+            assertThat(c.offset()).isEqualTo(received.size());
+            assertThat(c.data().length).isLessThanOrEqualTo(4);
+            received.writeBytes(c.data());
+            if (!c.more()) break;
+            h.outbox.clear();
+            h.receive(new InstallSnapshotReply("n3", 1, 7, received.size(), 0));
+            h.receive(new InstallSnapshotReply("n3", 1, 7, c.offset(), 0)); // a stale duplicate changes nothing
+            assertThat(chunk).isLessThan(10);
+        }
+        assertThat(received.toString()).isEqualTo("c0,c1,c2,c3,c4,c5");
+
+        h.receive(new AppendEntriesReply("n3", 1, true, 7, 0, 0, 0)); // n3 installed it
+        h.node.propose("after".getBytes(), r -> { });
+        assertThat(h.lastSent(AppendEntries.class, "n3").prevLogIndex()).isEqualTo(7);
+    }
+
+    @Test
+    void followerAssemblesChunksInOrderAndInstallsAfterTheLast() {
+        RaftHarness h = RaftHarness.classic();
+        h.receive(new InstallSnapshot("n2", 2, 10, 2, 0, "a,b".getBytes(), true, 0));
+        assertThat(h.lastSent(InstallSnapshotReply.class, "n2").nextOffset()).isEqualTo(3);
+        assertThat(h.node.commitIndex()).as("nothing installed before the last chunk").isZero();
+
+        h.receive(new InstallSnapshot("n2", 2, 10, 2, 5, "zz".getBytes(), true, 0)); // gap: ignored
+        assertThat(h.lastSent(InstallSnapshotReply.class, "n2").nextOffset()).isEqualTo(3);
+        h.receive(new InstallSnapshot("n3", 3, 10, 2, 3, ",x".getBytes(), false, 0)); // another leader's transfer
+        assertThat(h.node.commitIndex()).as("chunks from different leaders are never joined").isZero();
+
+        h.receive(new InstallSnapshot("n3", 3, 10, 2, 0, "a,b".getBytes(), true, 0));
+        h.receive(new InstallSnapshot("n3", 3, 10, 2, 3, ",c".getBytes(), false, 0));
+        assertThat(h.disk.snapshotIndex()).isEqualTo(10);
+        assertThat(h.node.lastApplied()).isEqualTo(10);
+        assertThat(h.applied).containsExactly("a", "b", "c");
+        assertThat(h.lastSent(AppendEntriesReply.class, "n3").matchIndex()).isEqualTo(10);
     }
 
     @Test

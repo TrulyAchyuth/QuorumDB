@@ -54,7 +54,7 @@ down, so a leader isolated in a minority stops accepting work.
 
 - After `snapshotThreshold` applied entries, the state machine is serialized at `lastApplied` and the log
   prefix is compacted.
-- A follower whose required entries are gone gets `InstallSnapshot` (one message). It keeps its log suffix
+- A follower whose required entries are gone gets `InstallSnapshot`, in chunks of at most `maxBytesPerAppend` with one chunk in flight. It keeps its log suffix
   only if it contains the snapshot's last entry with the same term.
 
 **Linearizable reads (thesis §6.4, ReadIndex).**

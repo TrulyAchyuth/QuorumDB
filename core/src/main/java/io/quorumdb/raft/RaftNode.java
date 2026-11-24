@@ -10,6 +10,7 @@ import io.quorumdb.raft.Outcomes.Status;
 import io.quorumdb.raft.RaftMessage.AppendEntries;
 import io.quorumdb.raft.RaftMessage.AppendEntriesReply;
 import io.quorumdb.raft.RaftMessage.InstallSnapshot;
+import io.quorumdb.raft.RaftMessage.InstallSnapshotReply;
 import io.quorumdb.raft.RaftMessage.RequestVote;
 import io.quorumdb.raft.RaftMessage.RequestVoteReply;
 import io.quorumdb.storage.RaftStorage;
@@ -75,6 +76,8 @@ public final class RaftNode {
          */
         long snapshotSentIndex;
         long snapshotSentMs;
+        /** Bytes of that snapshot the follower has confirmed; the next chunk starts here. */
+        long snapshotOffset;
         long lastAckMs = -1;
         long ackedReadSeq;
     }
@@ -374,6 +377,7 @@ public final class RaftNode {
                 case AppendEntries m -> replication.onAppendEntries(m);
                 case AppendEntriesReply m -> replication.onAppendEntriesReply(m);
                 case InstallSnapshot m -> snapshots.onInstallSnapshot(m);
+                case InstallSnapshotReply m -> snapshots.onInstallSnapshotReply(m);
             }
         });
     }

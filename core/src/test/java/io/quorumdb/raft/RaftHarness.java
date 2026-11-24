@@ -79,17 +79,18 @@ final class RaftHarness {
     }
 
     RaftHarness(int clusterSize, boolean preVote, boolean checkQuorum, long snapshotThreshold, MemoryStorage disk) {
-        this(clusterSize, preVote, checkQuorum, snapshotThreshold, disk, 0);
+        this(clusterSize, preVote, checkQuorum, snapshotThreshold, disk, 0, 1 << 20);
     }
 
+    // One constructor for both: separate (..., long) and (..., int) overloads would bind int literals to the wrong one.
     RaftHarness(int clusterSize, boolean preVote, boolean checkQuorum, long snapshotThreshold, MemoryStorage disk,
-                long snapshotTrailingEntries) {
+                long snapshotTrailingEntries, int maxBytesPerAppend) {
         this.disk = disk;
         this.lag = new LaggingStorage(disk);
         this.storage = new FaultyStorage(lag);
         List<String> peers = new ArrayList<>();
         for (int i = 2; i <= clusterSize; i++) peers.add("n" + i);
-        RaftConfig config = new RaftConfig("n1", peers, ELECTION_TIMEOUT, ELECTION_TIMEOUT * 2, HEARTBEAT, 100, 1 << 20,
+        RaftConfig config = new RaftConfig("n1", peers, ELECTION_TIMEOUT, ELECTION_TIMEOUT * 2, HEARTBEAT, 100, maxBytesPerAppend,
                 snapshotThreshold, 100, preVote, checkQuorum, true, snapshotTrailingEntries);
         node = new RaftNode(config, storage, machine, (to, m) -> outbox.add(new Sent(to, m)), scheduler, bound -> 0,
                 events::add);

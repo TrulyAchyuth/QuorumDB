@@ -138,7 +138,9 @@ latency; see [BENCHMARKS.md](BENCHMARKS.md) for methodology and caveats.
 - **WAL appends are off the Raft thread, other storage writes are not.** Appends and their fsync run on a WAL writer
   thread; votes, truncations and snapshots still block the node thread. The mixed-workload benchmark predates this
   change and has not been re-run.
-- **Whole-state snapshots in memory**, sent in a single InstallSnapshot message (fine for MB-scale data, not GB).
+- **Whole-state snapshots in memory.** InstallSnapshot is sent in chunks of at most 4 MB, one chunk in flight per
+  follower, but both sides still hold the whole snapshot in memory (fine for MB-scale data, not GB). A lost chunk
+  restarts that follower's transfer from the beginning after an election timeout.
 - **Durability depends on fsync.** On macOS `FileChannel.force` is `fsync`, not `F_FULLFSYNC`; power-loss durability is weaker there than on Linux.
 - **Live FaultLab** orders events from different nodes by their local clocks: accurate on one host, approximate across hosts. Live runs cannot be replayed exactly.
 - FaultLab's checkers find violations in what they observe; passing runs are evidence, not proof of correctness.

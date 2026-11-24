@@ -52,6 +52,14 @@ message InstallSnapshot {
   uint64 last_included_term = 2;
   bytes data = 3;
   uint64 read_seq = 4;
+  uint64 offset = 5;  // byte offset of data within the snapshot
+  bool more = 6;      // further chunks follow (false, the default, for the last or only chunk)
+}
+
+message InstallSnapshotReply {
+  uint64 last_included_index = 1;
+  uint64 next_offset = 2;  // bytes of that snapshot received so far
+  uint64 read_seq = 3;
 }
 
 message Envelope {
@@ -65,6 +73,7 @@ message Envelope {
     AppendEntries append_entries = 12;
     AppendEntriesReply append_entries_reply = 13;
     InstallSnapshot install_snapshot = 14;
+    InstallSnapshotReply install_snapshot_reply = 15;
   }
 }
 
