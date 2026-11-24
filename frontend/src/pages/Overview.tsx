@@ -6,6 +6,7 @@ import { usePoll } from "../hooks/usePoll";
 import { Async, Card, Empty, HealthBadge, RoleBadge, Stat } from "../components/ui";
 import { TimeSeriesChart } from "../components/charts";
 import { EventList } from "../components/EventList";
+import { QuorumRing } from "../components/QuorumRing";
 import { KEY_EVENTS } from "../lib/events";
 import { fmtClock, fmtInt, fmtMs, fmtNum } from "../lib/format";
 
@@ -31,6 +32,27 @@ export function Overview() {
           <p>Live state of every node, reported by the nodes themselves. Throughput and latency are measured on real requests over the last 10 seconds.</p>
         </div>
       </div>
+
+      {c && (
+        <section className="hero mt-lg">
+          <Card title="Quorum" sub="live, from each node">
+            <div style={{ padding: "var(--s3) var(--s4) var(--s4)" }}>
+              <QuorumRing nodes={c.nodes} leaderId={c.leaderId} live={c.health !== "UNAVAILABLE"} />
+            </div>
+          </Card>
+          <div className="card hero-copy">
+            <h2>{c.leaderId ? `${c.leaderId} leads term ${c.term}` : "No leader. Writes are paused until a majority can vote."}</h2>
+            <p>
+              {c.healthyNodes} of {c.size} nodes are serving. A write is acknowledged once {c.quorum} nodes have stored it.
+            </p>
+            <div className="facts">
+              <div className="fact"><b className="num">{c.quorum}</b><span>quorum size</span></div>
+              <div className="fact"><b className="num">{fmtInt(c.commitIndex)}</b><span>commit index</span></div>
+              <div className="fact"><b className="num">{fmtInt(c.maxReplicationLag)}</b><span>max lag</span></div>
+            </div>
+          </div>
+        </section>
+      )}
 
       <Async state={cluster} rows={2}>
         {(c) => (

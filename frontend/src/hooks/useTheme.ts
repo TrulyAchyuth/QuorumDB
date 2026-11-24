@@ -11,9 +11,9 @@ function apply(theme: Theme) {
 export function useTheme(): [Theme, (t: Theme) => void] {
   const [theme, setTheme] = useState<Theme>(() => {
     try {
-      return (localStorage.getItem("quorumdb.theme") as Theme) || "light";
+      return (localStorage.getItem("quorumdb.theme") as Theme) || "dark";
     } catch {
-      return "light";
+      return "dark";
     }
   });
   useEffect(() => {

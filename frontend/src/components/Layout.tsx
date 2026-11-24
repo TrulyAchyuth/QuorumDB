@@ -36,7 +36,7 @@ export function Layout() {
     <div className="shell">
       <aside className="sidebar">
         <div className="brand">
-          <img src="/favicon.svg" width={26} height={26} alt="" />
+          <img className="brand-mark" src="/favicon.svg" width={26} height={26} alt="" />
           <div>QuorumDB<small>Raft key-value store</small></div>
         </div>
         {NAV.map((item, i) =>
