@@ -29,9 +29,73 @@ class FileStorageRecoveryTest {
         for (LogEntry e : entries(from, to, term)) s.append(List.of(e));
     }
 
+    /** Appends are written in the background; wait for them before looking at the files. */
+    private static void awaitDurable(FileStorage s, long index) {
+        long deadline = System.nanoTime() + 5_000_000_000L;
+        while (s.durableIndex() < index) {
+            if (System.nanoTime() > deadline) throw new AssertionError("index " + index + " never became durable");
+            Thread.onSpinWait();
+        }
+    }
+
     private List<Path> segments() throws IOException {
         try (Stream<Path> s = Files.list(dir.resolve("wal"))) {
             return s.sorted().toList();
+        }
+    }
+
+    @Test
+    void appendsBecomeDurableInTheBackgroundAndNotifyTheListener() {
+        java.util.concurrent.atomic.AtomicBoolean ran = new java.util.concurrent.atomic.AtomicBoolean();
+        try (FileStorage s = open()) {
+            s.setDurabilityListener(() -> ran.set(true));
+            appendEach(s, 1, 30, 1);
+            assertThat(s.lastIndex()).as("readable immediately").isEqualTo(30);
+            awaitDurable(s, 30);
+            assertThat(s.durableIndex()).isEqualTo(30);
+            assertThat(ran).as("listener ran").isTrue();
+        }
+        try (FileStorage s = open()) {
+            assertThat(s.lastIndex()).isEqualTo(30);
+            assertThat(s.durableIndex()).isEqualTo(30);
+        }
+    }
+
+    @Test
+    void snapshotTailSurvivesReopenIfItMatchesTheSnapshot() {
+        try (FileStorage s = open()) {
+            appendEach(s, 1, 40, 1);
+            s.saveSnapshot(35, 1, "snap".getBytes(), 10);
+            assertThat(s.firstIndex()).isEqualTo(26);
+        }
+        try (FileStorage s = open()) {
+            assertThat(s.snapshotIndex()).isEqualTo(35);
+            assertThat(s.firstIndex()).as("at least the configured tail is back (whole segments are kept)")
+                    .isLessThanOrEqualTo(26);
+            assertThat(s.termAt(30)).isEqualTo(1);
+            assertThat(s.lastIndex()).isEqualTo(40);
+        }
+    }
+
+    @Test
+    void entriesBeforeTheSnapshotAreDroppedOnReopenIfTheyDoNotMatchIt() throws IOException {
+        try (FileStorage s = open()) {
+            appendEach(s, 1, 20, 1);
+        }
+        Path backup = dir.resolveSibling(dir.getFileName() + "-wal-backup");
+        Files.createDirectories(backup);
+        for (Path segment : segments()) Files.copy(segment, backup.resolve(segment.getFileName()));
+        try (FileStorage s = open()) {
+            s.installSnapshot(15, 2, "snap".getBytes()); // a leader's snapshot; our entry 15 (term 1) does not match
+        }
+        // Crash after the snapshot became durable but before the old log was removed.
+        try (Stream<Path> files = Files.list(backup)) {
+            for (Path segment : files.toList()) Files.copy(segment, dir.resolve("wal").resolve(segment.getFileName()));
+        }
+        try (FileStorage s = open()) {
+            assertThat(s.snapshotIndex()).isEqualTo(15);
+            assertThat(s.firstIndex()).as("old entries 1..15 must not pass for the snapshot's history").isEqualTo(16);
+            assertThatThrownBy(() -> s.entry(15)).isInstanceOf(IllegalArgumentException.class);
         }
     }
 
@@ -65,6 +129,7 @@ class FileStorageRecoveryTest {
     void logRollsIntoSegmentsAndCompactionDeletesOldOnes() throws IOException {
         try (FileStorage s = open()) {
             appendEach(s, 1, 100, 1);
+            awaitDurable(s, 100);
             int before = segments().size();
             assertThat(before).as("small segment size forces several segments").isGreaterThan(3);
             s.saveSnapshot(90, 1, new byte[10]);

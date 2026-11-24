@@ -75,6 +75,70 @@ class RealClusterIT {
     }
 
     @Test
+    void tlsClusterReplicatesOverMutualTlsAndServesHttps() throws Exception {
+        Path tls = ProcessCluster.generateTls(dir.resolve("tls"));
+        cluster = ProcessCluster.start(dir, 3, tls);
+        String leader = cluster.awaitLeader("n1", Duration.ofSeconds(20));
+        // Every node must have heard from the leader (first TLS handshakes take a moment) before we write.
+        for (String n : cluster.ids()) assertThat(cluster.awaitLeader(n, Duration.ofSeconds(20))).isEqualTo(leader);
+        evidence("TLS cluster elected " + leader + " over mutual-TLS gRPC");
+
+        String follower = other(leader);
+        Response put = cluster.put(follower, "secure", "yes");
+        assertThat(put.status()).as(put.raw()).isEqualTo(201);
+        assertThat(put.body().get("servedBy").asString()).as("forwarded to the leader over HTTPS").isEqualTo(leader);
+        for (String n : cluster.ids()) {
+            assertThat(cluster.get(n, "/api/v1/kv/secure").body().get("value").asString()).isEqualTo("yes");
+        }
+
+        java.net.http.HttpClient plain = java.net.http.HttpClient.newHttpClient();
+        int status;
+        try {
+            status = plain.send(java.net.http.HttpRequest.newBuilder(cluster.plaintextUri(leader, "/api/v1/kv/secure"))
+                    .build(), java.net.http.HttpResponse.BodyHandlers.discarding()).statusCode();
+        } catch (java.io.IOException e) {
+            status = -1;
+        }
+        assertThat(status).as("plain HTTP is not served on a TLS port").isNotEqualTo(200);
+    }
+
+    @Test
+    void nodeIsAddedToARunningClusterAndTheLeaderIsRemoved() throws Exception {
+        cluster = ProcessCluster.start(dir, 4, 3);
+        String leader = cluster.awaitLeader("n1", Duration.ofSeconds(10));
+        assertThat(cluster.put(leader, "before", "1").status()).isEqualTo(201);
+
+        cluster.startNode("n4");
+        cluster.awaitHttp("n4");
+        Response add = cluster.admin(leader, "POST", "/api/v1/members", cluster.memberBody("n4"));
+        assertThat(add.status()).as(add.raw()).isEqualTo(200);
+        ProcessCluster.await(Duration.ofSeconds(10), () -> {
+            Response r = cluster.get("n4", "/api/v1/kv/before?consistency=stale");
+            return r.status() == 200 && "1".equals(r.body().get("value").asString());
+        }, "n4 never caught up");
+        String other = other(leader);
+        ProcessCluster.await(Duration.ofSeconds(5),
+                () -> cluster.get(other, "/api/v1/members").raw().contains("n4="), other + " never learned of n4");
+        evidence("n4 added to a running 3-node cluster and caught up");
+
+        Response remove = cluster.admin(leader, "DELETE", "/api/v1/members/" + leader, null);
+        assertThat(remove.status()).as(remove.raw()).isEqualTo(200);
+        String[] next = new String[1];
+        ProcessCluster.await(Duration.ofSeconds(10), () -> {
+            next[0] = cluster.leader("n4");
+            return next[0] != null && !next[0].equals(leader);
+        }, "no new leader after removing " + leader);
+        assertThat(cluster.put(next[0], "after", "2").status()).isEqualTo(201);
+        ProcessCluster.await(Duration.ofSeconds(10), () -> {
+            Response r = cluster.get("n4", "/api/v1/kv/after?consistency=stale");
+            return r.status() == 200 && "2".equals(r.body().get("value").asString());
+        }, "n4 did not receive writes from the new leader");
+        assertThat(cluster.get(next[0], "/api/v1/members").raw()).doesNotContain("\"" + leader + "\"")
+                .doesNotContain("\"" + leader + "=");
+        evidence(leader + " removed; " + next[0] + " leads {the other two, n4}");
+    }
+
+    @Test
     void leaderSigkillFailsOverWithoutLosingAcknowledgedWritesAndTheNodeCatchesUp() throws Exception {
         cluster = ProcessCluster.start(dir, 3);
         String leader = cluster.awaitLeader("n1", Duration.ofSeconds(10));

@@ -12,6 +12,7 @@ import io.quorumdb.rpc.Ack;
 import io.quorumdb.rpc.Envelope;
 import io.quorumdb.rpc.RaftTransportGrpc;
 import io.quorumdb.server.config.ClusterConfig;
+import io.quorumdb.server.config.Tls;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -58,6 +59,7 @@ public final class GrpcTransport implements Transport, AutoCloseable {
                            boolean faultBlocked) {}
 
     private final ClusterConfig cluster;
+    private final Tls tls;
     private final NetworkFaults faults;
     private final Consumer<RaftMessage> inbound;
     private final Server server;
@@ -70,15 +72,18 @@ public final class GrpcTransport implements Transport, AutoCloseable {
         return t;
     });
 
-    public GrpcTransport(ClusterConfig cluster, int port, NetworkFaults faults, Consumer<RaftMessage> inbound) {
+    /** @param tls mutual TLS for the Raft port and outgoing connections, or null for plaintext */
+    public GrpcTransport(ClusterConfig cluster, int port, Tls tls, NetworkFaults faults, Consumer<RaftMessage> inbound) {
         this.cluster = cluster;
+        this.tls = tls;
         this.faults = faults;
         this.inbound = inbound;
         for (String peer : cluster.peerIds()) stats.put(peer, new PeerStats());
-        this.server = NettyServerBuilder.forPort(port)
+        NettyServerBuilder builder = NettyServerBuilder.forPort(port)
                 .maxInboundMessageSize(MAX_MESSAGE_BYTES)
-                .addService(new Service())
-                .build();
+                .addService(new Service());
+        if (tls != null) builder.sslContext(tls.grpcServer());
+        this.server = builder.build();
     }
 
     public void start() throws IOException {
@@ -92,7 +97,7 @@ public final class GrpcTransport implements Transport, AutoCloseable {
 
     @Override
     public void send(String to, RaftMessage message) {
-        PeerStats s = stats.get(to);
+        PeerStats s = statsFor(to);
         if (s == null) return;
         if (faults.shouldDrop(to)) {
             s.dropped.incrementAndGet();
@@ -136,13 +141,22 @@ public final class GrpcTransport implements Transport, AutoCloseable {
         });
     }
 
+    /** Stats for any node this one knows how to reach (created when a membership change adds one); else null. */
+    private PeerStats statsFor(String peer) {
+        return cluster.address(peer) != null ? stats.computeIfAbsent(peer, p -> new PeerStats()) : null;
+    }
+
     private RaftTransportGrpc.RaftTransportStub stub(String peer) {
         return stubs.computeIfAbsent(peer, p -> {
-            ManagedChannel channel = NettyChannelBuilder.forTarget(cluster.peers().get(p).raftAddress())
-                    .usePlaintext()
+            NettyChannelBuilder builder = NettyChannelBuilder.forTarget(cluster.address(p).raftAddress())
                     .maxInboundMessageSize(MAX_MESSAGE_BYTES)
-                    .keepAliveTime(30, TimeUnit.SECONDS)
-                    .build();
+                    .keepAliveTime(30, TimeUnit.SECONDS);
+            if (tls == null) {
+                builder.usePlaintext();
+            } else {
+                builder.sslContext(tls.grpcClient());
+            }
+            ManagedChannel channel = builder.build();
             channels.put(p, channel);
             return RaftTransportGrpc.newStub(channel);
         });
@@ -152,7 +166,8 @@ public final class GrpcTransport implements Transport, AutoCloseable {
         long now = System.currentTimeMillis();
         Map<String, PeerView> out = new LinkedHashMap<>();
         for (String peer : cluster.peerIds()) {
-            PeerStats s = stats.get(peer);
+            PeerStats s = statsFor(peer);
+            if (s == null) continue;
             out.put(peer, new PeerView(peer, cluster.peers().get(peer).raftAddress(), s.sent.get(), s.failed.get(),
                     s.dropped.get(), s.received.get(), s.inFlight.get(),
                     s.lastSuccessMs < 0 ? -1 : now - s.lastSuccessMs,
@@ -173,7 +188,7 @@ public final class GrpcTransport implements Transport, AutoCloseable {
                         + " delivered to " + cluster.self().id()).asRuntimeException());
                 return;
             }
-            PeerStats s = stats.get(envelope.getFrom());
+            PeerStats s = statsFor(envelope.getFrom());
             if (s == null) {
                 response.onError(Status.PERMISSION_DENIED.withDescription("unknown sender").asRuntimeException());
                 return;

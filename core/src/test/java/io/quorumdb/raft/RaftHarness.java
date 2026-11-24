@@ -27,6 +27,7 @@ final class RaftHarness {
 
     final MemoryStorage disk;
     final FaultyStorage storage;
+    final LaggingStorage lag;
     final List<Sent> outbox = new ArrayList<>();
     final List<RaftEvent> events = new ArrayList<>();
     final List<String> applied = new ArrayList<>();
@@ -78,12 +79,30 @@ final class RaftHarness {
     }
 
     RaftHarness(int clusterSize, boolean preVote, boolean checkQuorum, long snapshotThreshold, MemoryStorage disk) {
+        this(clusterSize, preVote, checkQuorum, snapshotThreshold, disk, 0, 1 << 20, false);
+    }
+
+    /** With {@code joining}, n1 starts as a node being added to the cluster n2..nN (not yet a voter). */
+    RaftHarness(int clusterSize, boolean preVote, boolean checkQuorum, long snapshotThreshold, MemoryStorage disk,
+                boolean joining) {
+        this(clusterSize, preVote, checkQuorum, snapshotThreshold, disk, 0, 1 << 20, joining);
+    }
+
+    // One constructor for both: separate (..., long) and (..., int) overloads would bind int literals to the wrong one.
+    RaftHarness(int clusterSize, boolean preVote, boolean checkQuorum, long snapshotThreshold, MemoryStorage disk,
+                long snapshotTrailingEntries, int maxBytesPerAppend) {
+        this(clusterSize, preVote, checkQuorum, snapshotThreshold, disk, snapshotTrailingEntries, maxBytesPerAppend, false);
+    }
+
+    RaftHarness(int clusterSize, boolean preVote, boolean checkQuorum, long snapshotThreshold, MemoryStorage disk,
+                long snapshotTrailingEntries, int maxBytesPerAppend, boolean joining) {
         this.disk = disk;
-        this.storage = new FaultyStorage(disk);
+        this.lag = new LaggingStorage(disk);
+        this.storage = new FaultyStorage(lag);
         List<String> peers = new ArrayList<>();
         for (int i = 2; i <= clusterSize; i++) peers.add("n" + i);
-        RaftConfig config = new RaftConfig("n1", peers, ELECTION_TIMEOUT, ELECTION_TIMEOUT * 2, HEARTBEAT, 100, 1 << 20,
-                snapshotThreshold, 100, preVote, checkQuorum, true);
+        RaftConfig config = new RaftConfig("n1", peers, ELECTION_TIMEOUT, ELECTION_TIMEOUT * 2, HEARTBEAT, 100, maxBytesPerAppend,
+                snapshotThreshold, 100, preVote, checkQuorum, true, snapshotTrailingEntries, joining);
         node = new RaftNode(config, storage, machine, (to, m) -> outbox.add(new Sent(to, m)), scheduler, bound -> 0,
                 events::add);
         node.start();

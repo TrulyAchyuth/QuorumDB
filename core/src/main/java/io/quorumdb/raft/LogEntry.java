@@ -12,7 +12,13 @@ public record LogEntry(long index, long term, Type type, byte[] data) {
         /** Appended by every new leader so it can commit an entry from its own term (Raft §5.4.2, §8). */
         NOOP,
         /** An opaque state machine command. */
-        COMMAND;
+        COMMAND,
+        /**
+         * The complete new set of voting members, one per line (single-server membership change, Raft dissertation
+         * §4.1). Each line is a member id, optionally followed by {@code =} and how to reach it. Takes effect when
+         * appended. Appended last so existing ordinals (stored in the WAL and on the wire) do not change.
+         */
+        CONFIG;
 
         public static Type fromOrdinal(int ordinal) {
             Type[] values = values();

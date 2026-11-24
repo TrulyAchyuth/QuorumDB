@@ -8,6 +8,7 @@ import io.quorumdb.rpc.AppendEntriesReply;
 import io.quorumdb.rpc.Entry;
 import io.quorumdb.rpc.Envelope;
 import io.quorumdb.rpc.InstallSnapshot;
+import io.quorumdb.rpc.InstallSnapshotReply;
 import io.quorumdb.rpc.RequestVote;
 import io.quorumdb.rpc.RequestVoteReply;
 
@@ -40,7 +41,10 @@ public final class ProtoCodec {
                     .setConflictTerm(m.conflictTerm()).setReadSeq(m.readSeq()));
             case RaftMessage.InstallSnapshot m -> env.setInstallSnapshot(InstallSnapshot.newBuilder()
                     .setLastIncludedIndex(m.lastIncludedIndex()).setLastIncludedTerm(m.lastIncludedTerm())
-                    .setData(ByteString.copyFrom(m.data())).setReadSeq(m.readSeq()));
+                    .setOffset(m.offset()).setData(ByteString.copyFrom(m.data())).setMore(m.more())
+                    .setReadSeq(m.readSeq()));
+            case RaftMessage.InstallSnapshotReply m -> env.setInstallSnapshotReply(InstallSnapshotReply.newBuilder()
+                    .setLastIncludedIndex(m.lastIncludedIndex()).setNextOffset(m.nextOffset()).setReadSeq(m.readSeq()));
         }
         return env.build();
     }
@@ -86,7 +90,12 @@ public final class ProtoCodec {
                     throw new IllegalArgumentException("snapshot must cover at least one entry");
                 }
                 yield new RaftMessage.InstallSnapshot(from, term, m.getLastIncludedIndex(), m.getLastIncludedTerm(),
-                        m.getData().toByteArray(), nonNegative(m.getReadSeq()));
+                        nonNegative(m.getOffset()), m.getData().toByteArray(), m.getMore(), nonNegative(m.getReadSeq()));
+            }
+            case INSTALL_SNAPSHOT_REPLY -> {
+                InstallSnapshotReply m = env.getInstallSnapshotReply();
+                yield new RaftMessage.InstallSnapshotReply(from, term, nonNegative(m.getLastIncludedIndex()),
+                        nonNegative(m.getNextOffset()), nonNegative(m.getReadSeq()));
             }
             case BODY_NOT_SET -> throw new IllegalArgumentException("envelope has no body");
         };

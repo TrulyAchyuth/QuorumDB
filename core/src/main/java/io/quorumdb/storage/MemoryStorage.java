@@ -15,6 +15,7 @@ public final class MemoryStorage implements RaftStorage {
     private long snapshotIndex;
     private long snapshotTerm;
     private byte[] snapshot;
+    private long firstIndex = 1; // index of log.get(0)
     private final ArrayList<LogEntry> log = new ArrayList<>();
 
     @Override public long currentTerm() { return term; }
@@ -29,7 +30,8 @@ public final class MemoryStorage implements RaftStorage {
     @Override public long snapshotIndex() { return snapshotIndex; }
     @Override public long snapshotTerm() { return snapshotTerm; }
     @Override public byte[] loadSnapshot() { return snapshot; }
-    @Override public long lastIndex() { return snapshotIndex + log.size(); }
+    @Override public long firstIndex() { return firstIndex; }
+    @Override public long lastIndex() { return firstIndex + log.size() - 1; }
 
     @Override
     public long termAt(long index) {
@@ -40,11 +42,11 @@ public final class MemoryStorage implements RaftStorage {
 
     @Override
     public LogEntry entry(long index) {
-        if (index <= snapshotIndex || index > lastIndex()) {
-            throw new IllegalArgumentException("index " + index + " outside retained log ("
-                    + snapshotIndex + ", " + lastIndex() + "]");
+        if (index < firstIndex || index > lastIndex()) {
+            throw new IllegalArgumentException("index " + index + " outside retained log ["
+                    + firstIndex + ", " + lastIndex() + "]");
         }
-        return log.get((int) (index - snapshotIndex - 1));
+        return log.get((int) (index - firstIndex));
     }
 
     @Override
@@ -52,7 +54,7 @@ public final class MemoryStorage implements RaftStorage {
         if (fromIndex > toIndexInclusive) return List.of();
         entry(fromIndex);
         entry(toIndexInclusive);
-        return List.copyOf(log.subList((int) (fromIndex - snapshotIndex - 1), (int) (toIndexInclusive - snapshotIndex)));
+        return List.copyOf(log.subList((int) (fromIndex - firstIndex), (int) (toIndexInclusive - firstIndex + 1)));
     }
 
     @Override
@@ -71,11 +73,13 @@ public final class MemoryStorage implements RaftStorage {
     }
 
     @Override
-    public void saveSnapshot(long index, long term, byte[] data) {
+    public void saveSnapshot(long index, long term, byte[] data, long trailingEntries) {
         if (index <= snapshotIndex || index > lastIndex()) {
             throw new IllegalArgumentException("snapshot index " + index + " not in log");
         }
-        log.subList(0, (int) (index - snapshotIndex)).clear();
+        long keepFrom = Math.max(firstIndex, index + 1 - trailingEntries);
+        log.subList(0, (int) (keepFrom - firstIndex)).clear();
+        firstIndex = keepFrom;
         setSnapshot(index, term, data);
     }
 
@@ -83,10 +87,11 @@ public final class MemoryStorage implements RaftStorage {
     public void installSnapshot(long index, long term, byte[] data) {
         boolean keepSuffix = index > snapshotIndex && index <= lastIndex() && termAt(index) == term;
         if (keepSuffix) {
-            log.subList(0, (int) (index - snapshotIndex)).clear();
+            log.subList(0, (int) (index + 1 - firstIndex)).clear();
         } else {
             log.clear();
         }
+        firstIndex = index + 1;
         setSnapshot(index, term, data);
     }
 
@@ -103,6 +108,7 @@ public final class MemoryStorage implements RaftStorage {
         snapshotIndex = 0;
         snapshotTerm = 0;
         snapshot = null;
+        firstIndex = 1;
         log.clear();
     }
 

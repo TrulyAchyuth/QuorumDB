@@ -4,6 +4,7 @@ import io.quorumdb.raft.Outcomes.Status;
 import io.quorumdb.raft.RaftMessage.AppendEntries;
 import io.quorumdb.raft.RaftMessage.AppendEntriesReply;
 import io.quorumdb.raft.RaftMessage.InstallSnapshot;
+import io.quorumdb.raft.RaftMessage.InstallSnapshotReply;
 import io.quorumdb.raft.RaftNode.Role;
 import io.quorumdb.storage.MemoryStorage;
 import org.junit.jupiter.api.Test;
@@ -313,6 +314,35 @@ class RaftReplicationTest {
         assertThat(h.lastSent(AppendEntries.class, "n3").prevLogIndex()).isEqualTo(7);
     }
 
+    @Test
+    void slightlyBehindFollowerIsSentEntriesFromTheTailInsteadOfTheSnapshot() {
+        RaftHarness h = new RaftHarness(3, false, false, 6, new MemoryStorage(), 3, 1 << 20);
+        h.electLeader();
+        for (int i = 0; i < 6; i++) h.node.propose(("c" + i).getBytes(), r -> { });
+        h.ack("n3", 5);  // n3 has 1..5
+        h.ack("n2", 7);  // commits 7 and snapshots through 7, keeping entries 5..7
+        assertThat(h.disk.snapshotIndex()).isEqualTo(7);
+        assertThat(h.disk.firstIndex()).isEqualTo(5);
+
+        h.outbox.clear();
+        h.receive(new AppendEntriesReply("n3", 1, false, 0, 6, 0, 0)); // n3 still needs 6 onwards
+        AppendEntries catchUp = h.lastSent(AppendEntries.class, "n3");
+        assertThat(catchUp.prevLogIndex()).isEqualTo(5);
+        assertThat(catchUp.prevLogTerm()).isEqualTo(1);
+        assertThat(catchUp.entries()).extracting(LogEntry::index).containsExactly(6L, 7L);
+        assertThat(h.sent(InstallSnapshot.class)).as("no snapshot for a follower the tail covers").isEmpty();
+    }
+
+    @Test
+    void followerBehindTheTailStillGetsTheSnapshot() {
+        RaftHarness h = new RaftHarness(3, false, false, 6, new MemoryStorage(), 3, 1 << 20);
+        h.electLeader();
+        for (int i = 0; i < 6; i++) h.node.propose(("c" + i).getBytes(), r -> { });
+        h.ack("n2", 7); // snapshot through 7, tail 5..7; n3 has nothing
+        h.receive(new AppendEntriesReply("n3", 1, false, 0, 1, 0, 0));
+        assertThat(h.lastSent(InstallSnapshot.class, "n3").lastIncludedIndex()).isEqualTo(7);
+    }
+
     /**
      * Regression: replies to heartbeats and read rounds cleared the follower's in-flight flag, and every
      * such reply re-sent the whole snapshot while the first one was still on its way. Under linearizable
@@ -352,6 +382,56 @@ class RaftReplicationTest {
     }
 
     @Test
+    void largeSnapshotIsSentInChunksOneAtATime() {
+        RaftHarness h = new RaftHarness(3, false, false, 5, new MemoryStorage(), 0, 4);
+        h.electLeader();
+        for (int i = 0; i < 6; i++) h.node.propose(("c" + i).getBytes(), r -> { });
+        h.outbox.clear();
+        h.ack("n2", 7); // snapshot "c0,c1,c2,c3,c4,c5" (17 bytes) through 7; n3 has nothing, so its transfer starts
+        h.receive(new AppendEntriesReply("n3", 1, false, 0, 1, 0, 0)); // n3 answers a heartbeat: no second chunk
+
+        java.io.ByteArrayOutputStream received = new java.io.ByteArrayOutputStream();
+        for (int chunk = 0; ; chunk++) {
+            List<InstallSnapshot> sent = h.sent(InstallSnapshot.class);
+            assertThat(sent).as("one chunk in flight at a time").hasSize(1);
+            InstallSnapshot c = sent.get(0);
+            assertThat(c.offset()).isEqualTo(received.size());
+            assertThat(c.data().length).isLessThanOrEqualTo(4);
+            received.writeBytes(c.data());
+            if (!c.more()) break;
+            h.outbox.clear();
+            h.receive(new InstallSnapshotReply("n3", 1, 7, received.size(), 0));
+            h.receive(new InstallSnapshotReply("n3", 1, 7, c.offset(), 0)); // a stale duplicate changes nothing
+            assertThat(chunk).isLessThan(10);
+        }
+        assertThat(received.toString()).isEqualTo("c0,c1,c2,c3,c4,c5");
+
+        h.receive(new AppendEntriesReply("n3", 1, true, 7, 0, 0, 0)); // n3 installed it
+        h.node.propose("after".getBytes(), r -> { });
+        assertThat(h.lastSent(AppendEntries.class, "n3").prevLogIndex()).isEqualTo(7);
+    }
+
+    @Test
+    void followerAssemblesChunksInOrderAndInstallsAfterTheLast() {
+        RaftHarness h = RaftHarness.classic();
+        h.receive(new InstallSnapshot("n2", 2, 10, 2, 0, "a,b".getBytes(), true, 0));
+        assertThat(h.lastSent(InstallSnapshotReply.class, "n2").nextOffset()).isEqualTo(3);
+        assertThat(h.node.commitIndex()).as("nothing installed before the last chunk").isZero();
+
+        h.receive(new InstallSnapshot("n2", 2, 10, 2, 5, "zz".getBytes(), true, 0)); // gap: ignored
+        assertThat(h.lastSent(InstallSnapshotReply.class, "n2").nextOffset()).isEqualTo(3);
+        h.receive(new InstallSnapshot("n3", 3, 10, 2, 3, ",x".getBytes(), false, 0)); // another leader's transfer
+        assertThat(h.node.commitIndex()).as("chunks from different leaders are never joined").isZero();
+
+        h.receive(new InstallSnapshot("n3", 3, 10, 2, 0, "a,b".getBytes(), true, 0));
+        h.receive(new InstallSnapshot("n3", 3, 10, 2, 3, ",c".getBytes(), false, 0));
+        assertThat(h.disk.snapshotIndex()).isEqualTo(10);
+        assertThat(h.node.lastApplied()).isEqualTo(10);
+        assertThat(h.applied).containsExactly("a", "b", "c");
+        assertThat(h.lastSent(AppendEntriesReply.class, "n3").matchIndex()).isEqualTo(10);
+    }
+
+    @Test
     void followerInstallsSnapshotAndContinuesFromIt() {
         RaftHarness h = RaftHarness.classic();
         h.receive(append("n2", 1, 0, 0, 0, entry(1, 1, "stale")));
@@ -383,6 +463,52 @@ class RaftReplicationTest {
         assertThat(after.node.commitIndex()).isEqualTo(4);
         assertThat(after.disk.lastIndex()).as("the uncommitted entry is still in the log, not applied").isEqualTo(5);
         assertThat(after.saw(RaftEvent.Type.RECOVERY_COMPLETED)).isTrue();
+    }
+
+    // ---------------------------------------------------------------- durability
+
+    @Test
+    void followerHoldsItsAcknowledgementUntilTheEntriesAreDurable() {
+        RaftHarness h = RaftHarness.classic();
+        h.lag.hold();
+        h.receive(append("n2", 1, 0, 0, 0, entry(1, 1, "a"), entry(2, 1, "b")));
+        assertThat(h.sent(AppendEntriesReply.class)).as("not durable yet: no acknowledgement").isEmpty();
+
+        h.lag.release();
+        h.node.onPersisted();
+        AppendEntriesReply reply = h.lastSent(AppendEntriesReply.class, "n2");
+        assertThat(reply.success()).isTrue();
+        assertThat(reply.matchIndex()).isEqualTo(2);
+    }
+
+    @Test
+    void heldAcknowledgementIsDroppedWhenANewLeaderTakesOver() {
+        RaftHarness h = RaftHarness.classic();
+        h.lag.hold();
+        h.receive(append("n2", 1, 0, 0, 0, entry(1, 1, "a")));
+        h.receive(append("n3", 2, 0, 0, 0)); // new leader, term 2: its log was not checked against entry 1
+        h.outbox.clear();
+        h.lag.release();
+        h.node.onPersisted();
+        assertThat(h.sent(AppendEntriesReply.class)).as("term-1 acknowledgement must not go to the term-2 leader")
+                .isEmpty();
+    }
+
+    @Test
+    void leaderCountsItsOwnCopyOnlyOnceItIsDurable() {
+        RaftHarness h = RaftHarness.classic();
+        h.lag.hold();
+        h.electLeader();
+        List<Outcomes.Proposal> results = new ArrayList<>();
+        h.node.propose("x".getBytes(), results::add);
+        h.ack("n2", 2); // n2 has the no-op and x durably; the leader's own copies are still being written
+        assertThat(h.node.commitIndex()).as("one durable copy of three is not a majority").isZero();
+        assertThat(results).isEmpty();
+
+        h.lag.release();
+        h.node.onPersisted();
+        assertThat(h.node.commitIndex()).isEqualTo(2);
+        assertThat(results).extracting(Outcomes.Proposal::status).containsExactly(Status.OK);
     }
 
     // ---------------------------------------------------------------- failures

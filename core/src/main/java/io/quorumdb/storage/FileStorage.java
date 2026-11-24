@@ -14,6 +14,10 @@ import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 import java.util.zip.CRC32C;
 
@@ -41,6 +45,14 @@ import java.util.zip.CRC32C;
  * segment, a gap between snapshot and log) is <em>corruption</em> and aborts startup with
  * {@link StorageException.Corrupted}, because silently dropping acknowledged entries could break
  * Raft's safety guarantees.
+ *
+ * <h2>Background WAL writes</h2>
+ * {@link #append} updates the in-memory log and hands the record write to a single writer thread, so the
+ * Raft thread does not wait for the disk. The writer fsyncs once its queue is empty (one fsync covers every
+ * append queued behind the one in progress), then advances {@link #durableIndex()} and runs the durability
+ * listener. A failed background write is remembered and rethrown by the next call on the Raft thread.
+ * Every other mutation first waits for queued writes, then runs synchronously, so the files see the same
+ * order of operations as before.
  *
  * <h2>Durability assumptions</h2>
  * With {@link SyncMode#ALWAYS} each mutating call ends with {@code fsync} (FileChannel.force), so
@@ -88,11 +100,19 @@ public final class FileStorage implements RaftStorage {
     private long snapshotTerm;
     private Path snapshotPath;
 
-    /** Retained entries, i.e. indexes (snapshotIndex, lastIndex]; {@code offsets} is parallel. */
+    /** Retained entries, i.e. indexes [firstIndex, lastIndex]; {@code offsets} is parallel. */
     private final ArrayList<LogEntry> entries = new ArrayList<>();
+    private long firstIndex = 1;
     private final ArrayList<Long> offsets = new ArrayList<>();
     private final ArrayList<Segment> segments = new ArrayList<>();
     private boolean closed;
+
+    private final ThreadPoolExecutor writer;
+    /** Highest index written to the WAL by the writer (written by the writer, or by the Raft thread after {@link #drain()}). */
+    private long writtenIndex;
+    private volatile long durableIndex;
+    private volatile StorageException writeFailure;
+    private volatile Runnable durabilityListener = () -> { };
 
     public FileStorage(Path dir, SyncMode syncMode, long segmentBytes) {
         this.dir = dir;
@@ -100,6 +120,11 @@ public final class FileStorage implements RaftStorage {
         this.snapshotDir = dir.resolve("snapshots");
         this.syncMode = syncMode;
         this.segmentBytes = segmentBytes;
+        this.writer = new ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>(), r -> {
+            Thread t = new Thread(r, "wal-writer-" + dir.getFileName());
+            t.setDaemon(true);
+            return t;
+        });
         try {
             Files.createDirectories(walDir);
             Files.createDirectories(snapshotDir);
@@ -110,6 +135,8 @@ public final class FileStorage implements RaftStorage {
                 throw new StorageException("data directory " + dir + " is in use by another process");
             }
             recover();
+            writtenIndex = lastIndex();
+            durableIndex = writtenIndex;
         } catch (IOException e) {
             throw new StorageException("cannot open storage at " + dir, e);
         } catch (java.nio.channels.OverlappingFileLockException e) {
@@ -213,6 +240,11 @@ public final class FileStorage implements RaftStorage {
                 throw new StorageException.Corrupted(path + ": expected log to continue at " + expected);
             }
             Segment segment = new Segment(path, firstIndex);
+            if (firstIndex != expected) {
+                // A gap allowed above lies within the snapshot: what was read before it cannot be a contiguous tail.
+                entries.clear();
+                offsets.clear();
+            }
             expected = firstIndex;
             long validEnd = SEGMENT_HEADER;
             while (buf.hasRemaining()) {
@@ -225,10 +257,8 @@ public final class FileStorage implements RaftStorage {
                     }
                     break; // torn tail
                 }
-                if (e.index() > snapshotIndex) {
-                    entries.add(e);
-                    offsets.add((long) start);
-                }
+                entries.add(e);
+                offsets.add((long) start);
                 expected++;
                 validEnd = buf.position();
             }
@@ -242,9 +272,22 @@ public final class FileStorage implements RaftStorage {
             segment.channel.position(validEnd);
             segments.add(segment);
         }
-        if (!entries.isEmpty() && entries.get(0).index() != snapshotIndex + 1) {
+        if (!entries.isEmpty() && entries.get(0).index() > snapshotIndex + 1) {
             throw new StorageException.Corrupted("log starts at " + entries.get(0).index()
                     + " but snapshot ends at " + snapshotIndex + ": entries are missing");
+        }
+        firstIndex = entries.isEmpty() ? snapshotIndex + 1 : entries.get(0).index();
+        // Entries at or before the snapshot are kept as a tail only if they provably match it (same term at the
+        // snapshot index, so the whole prefix matches by Log Matching). A log left behind by a crash during
+        // installSnapshot may not; then they are dropped, as they always were before tails existed.
+        long last = firstIndex + entries.size() - 1;
+        boolean tailMatches = firstIndex > snapshotIndex
+                || (last >= snapshotIndex && entries.get((int) (snapshotIndex - firstIndex)).term() == snapshotTerm);
+        if (!tailMatches) {
+            int drop = (int) Math.min(entries.size(), snapshotIndex + 1 - firstIndex);
+            entries.subList(0, drop).clear();
+            offsets.subList(0, drop).clear();
+            firstIndex = snapshotIndex + 1;
         }
     }
 
@@ -330,7 +373,8 @@ public final class FileStorage implements RaftStorage {
 
     @Override public long snapshotIndex() { return snapshotIndex; }
     @Override public long snapshotTerm() { return snapshotTerm; }
-    @Override public long lastIndex() { return snapshotIndex + entries.size(); }
+    @Override public long firstIndex() { return firstIndex; }
+    @Override public long lastIndex() { return firstIndex + entries.size() - 1; }
 
     @Override
     public long termAt(long index) {
@@ -341,11 +385,11 @@ public final class FileStorage implements RaftStorage {
 
     @Override
     public LogEntry entry(long index) {
-        if (index <= snapshotIndex || index > lastIndex()) {
-            throw new IllegalArgumentException("index " + index + " outside retained log ("
-                    + snapshotIndex + ", " + lastIndex() + "]");
+        if (index < firstIndex || index > lastIndex()) {
+            throw new IllegalArgumentException("index " + index + " outside retained log ["
+                    + firstIndex + ", " + lastIndex() + "]");
         }
-        return entries.get((int) (index - snapshotIndex - 1));
+        return entries.get((int) (index - firstIndex));
     }
 
     @Override
@@ -353,20 +397,40 @@ public final class FileStorage implements RaftStorage {
         if (fromIndex > toIndexInclusive) return List.of();
         entry(fromIndex);
         entry(toIndexInclusive);
-        return List.copyOf(entries.subList((int) (fromIndex - snapshotIndex - 1), (int) (toIndexInclusive - snapshotIndex)));
+        return List.copyOf(entries.subList((int) (fromIndex - firstIndex), (int) (toIndexInclusive - firstIndex + 1)));
     }
 
     @Override
     public void append(List<LogEntry> newEntries) {
         if (newEntries.isEmpty()) return;
         ensureOpen();
+        checkWriteFailure();
         long expected = lastIndex() + 1;
-        int total = 0;
         for (LogEntry e : newEntries) {
             if (e.index() != expected++) throw new IllegalArgumentException("non-contiguous append at " + e.index());
-            total += RECORD_HEADER + MIN_PAYLOAD + e.data().length;
         }
+        List<LogEntry> batch = List.copyOf(newEntries);
+        entries.addAll(batch);
+        writer.execute(() -> writeRecords(batch));
+    }
+
+    @Override
+    public long durableIndex() {
+        checkWriteFailure();
+        return Math.max(durableIndex, snapshotIndex);
+    }
+
+    @Override
+    public void setDurabilityListener(Runnable listener) {
+        durabilityListener = listener == null ? () -> { } : listener;
+    }
+
+    /** Writer thread: appends the records; fsyncs if nothing else is queued behind them. */
+    private void writeRecords(List<LogEntry> newEntries) {
+        if (writeFailure != null) return; // the log on disk ends before this batch; never acknowledge it
         try {
+            int total = 0;
+            for (LogEntry e : newEntries) total += RECORD_HEADER + MIN_PAYLOAD + e.data().length;
             Segment segment = activeSegmentFor(newEntries.get(0).index());
             ByteBuffer buf = ByteBuffer.allocate(total);
             List<Long> newOffsets = new ArrayList<>(newEntries.size());
@@ -384,14 +448,52 @@ public final class FileStorage implements RaftStorage {
             }
             buf.flip();
             while (buf.hasRemaining()) segment.channel.write(buf);
-            if (syncMode == SyncMode.ALWAYS) segment.channel.force(false);
             segment.size += total;
-            segment.nextIndex = expected;
-            entries.addAll(newEntries);
+            segment.nextIndex = newEntries.get(newEntries.size() - 1).index() + 1;
             offsets.addAll(newOffsets);
-        } catch (IOException e) {
-            throw new StorageException("WAL append failed", e);
+            writtenIndex = segment.nextIndex - 1;
+            if (writer.getQueue().isEmpty()) syncWritten();
+        } catch (IOException | RuntimeException e) {
+            writeFailure = new StorageException("WAL append failed", e);
+            notifyListener();
         }
+    }
+
+    /** Writer thread: makes everything written so far durable and publishes the new durable index. */
+    private void syncWritten() throws IOException {
+        if (writtenIndex == durableIndex) return;
+        if (syncMode == SyncMode.ALWAYS && !segments.isEmpty()) segments.get(segments.size() - 1).channel.force(false);
+        durableIndex = writtenIndex;
+        notifyListener();
+    }
+
+    private void notifyListener() {
+        try {
+            durabilityListener.run();
+        } catch (RuntimeException ignored) {
+            // the listener's executor may already be shut down; the Raft thread will see the state when it next looks
+        }
+    }
+
+    /** Waits until every queued write is durable. Afterwards the Raft thread may touch segments and offsets. */
+    private void drain() {
+        try {
+            writer.submit(() -> {
+                if (writeFailure == null) syncWritten();
+                return null;
+            }).get();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new StorageException("interrupted while waiting for the WAL", e);
+        } catch (ExecutionException e) {
+            writeFailure = new StorageException("WAL sync failed", e.getCause());
+        }
+        checkWriteFailure();
+    }
+
+    private void checkWriteFailure() {
+        StorageException failure = writeFailure;
+        if (failure != null) throw new StorageException(failure.getMessage(), failure);
     }
 
     /** The segment that the entry at {@code index} should be appended to, rolling if necessary. */
@@ -418,12 +520,13 @@ public final class FileStorage implements RaftStorage {
         ensureOpen();
         if (fromIndex <= snapshotIndex) throw new IllegalArgumentException("cannot truncate into the snapshot");
         if (fromIndex > lastIndex()) return;
+        drain();
         try {
             // Newest segments first so a crash part-way leaves a contiguous (shorter) log.
             while (!segments.isEmpty() && segments.get(segments.size() - 1).firstIndex >= fromIndex) {
                 deleteSegment(segments.remove(segments.size() - 1));
             }
-            int position = (int) (fromIndex - snapshotIndex - 1);
+            int position = (int) (fromIndex - firstIndex);
             if (!segments.isEmpty()) {
                 Segment segment = segments.get(segments.size() - 1);
                 if (segment.nextIndex > fromIndex) {
@@ -438,6 +541,8 @@ public final class FileStorage implements RaftStorage {
             syncDirectory(walDir);
             entries.subList(position, entries.size()).clear();
             offsets.subList(position, offsets.size()).clear();
+            writtenIndex = fromIndex - 1;
+            durableIndex = writtenIndex;
         } catch (IOException e) {
             throw new StorageException("WAL truncate failed", e);
         }
@@ -464,23 +569,25 @@ public final class FileStorage implements RaftStorage {
     }
 
     @Override
-    public void saveSnapshot(long index, long snapTerm, byte[] data) {
+    public void saveSnapshot(long index, long snapTerm, byte[] data, long trailingEntries) {
         ensureOpen();
         if (index <= snapshotIndex || index > lastIndex()) {
             throw new IllegalArgumentException("snapshot index " + index + " not in log");
         }
+        drain();
         writeSnapshotFile(index, snapTerm, data);
-        compactThrough(index, true);
+        compactThrough(index, Math.max(firstIndex, index + 1 - trailingEntries));
     }
 
     @Override
     public void installSnapshot(long index, long snapTerm, byte[] data) {
         ensureOpen();
         boolean keepSuffix = index > snapshotIndex && index <= lastIndex() && termAt(index) == snapTerm;
+        drain();
         // Order matters for crash safety: the snapshot becomes durable first, only then is log
         // removed. A crash in between leaves snapshot + old log, which recovery handles.
         writeSnapshotFile(index, snapTerm, data);
-        compactThrough(index, keepSuffix);
+        compactThrough(index, keepSuffix ? index + 1 : -1);
     }
 
     private void writeSnapshotFile(long index, long snapTerm, byte[] data) {
@@ -499,23 +606,30 @@ public final class FileStorage implements RaftStorage {
         }
     }
 
-    /** Drops in-memory entries up to {@code index} and deletes segments that are no longer needed. */
-    private void compactThrough(long index, boolean keepSuffix) {
+    /**
+     * Records the snapshot at {@code index}, drops in-memory entries before {@code keepFrom} and deletes
+     * segments that are no longer needed. {@code keepFrom < 0} discards the whole log.
+     */
+    private void compactThrough(long index, long keepFrom) {
         try {
-            if (keepSuffix) {
-                int drop = (int) (index - snapshotIndex);
+            if (keepFrom >= 0) {
+                int drop = (int) (keepFrom - firstIndex);
                 entries.subList(0, drop).clear();
                 offsets.subList(0, drop).clear();
-                // A segment is obsolete once the next segment starts at or before index + 1.
-                while (segments.size() > 1 && segments.get(1).firstIndex <= index + 1) {
+                firstIndex = keepFrom;
+                // A segment is obsolete once the next segment starts at or before keepFrom.
+                while (segments.size() > 1 && segments.get(1).firstIndex <= keepFrom) {
                     deleteSegment(segments.remove(0));
                 }
             } else {
                 entries.clear();
                 offsets.clear();
+                firstIndex = index + 1;
                 while (!segments.isEmpty()) {
                     deleteSegment(segments.remove(segments.size() - 1));
                 }
+                writtenIndex = index;
+                durableIndex = index;
             }
             syncDirectory(walDir);
         } catch (IOException e) {
@@ -554,7 +668,13 @@ public final class FileStorage implements RaftStorage {
     @Override
     public void close() {
         if (closed) return;
+        try {
+            drain();
+        } catch (StorageException e) {
+            // a failed write was never acknowledged; still release the files below
+        }
         closed = true;
+        writer.shutdownNow();
         try {
             for (Segment s : segments) s.channel.close();
             lock.release();

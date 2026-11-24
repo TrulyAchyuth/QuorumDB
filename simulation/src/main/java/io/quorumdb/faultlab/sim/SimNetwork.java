@@ -113,7 +113,10 @@ public final class SimNetwork {
             case RaftMessage.AppendEntriesReply r -> "AppendEntriesReply term=" + r.term() + " success=" + r.success()
                     + (r.success() ? " match=" + r.matchIndex() : " conflict=" + r.conflictIndex() + "@" + r.conflictTerm());
             case RaftMessage.InstallSnapshot s -> "InstallSnapshot term=" + s.term() + " through="
-                    + s.lastIncludedIndex() + "@" + s.lastIncludedTerm() + " bytes=" + s.data().length;
+                    + s.lastIncludedIndex() + "@" + s.lastIncludedTerm() + " offset=" + s.offset()
+                    + " bytes=" + s.data().length + (s.more() ? " more" : "");
+            case RaftMessage.InstallSnapshotReply r -> "InstallSnapshotReply term=" + r.term() + " through="
+                    + r.lastIncludedIndex() + " next=" + r.nextOffset();
         };
     }
 }

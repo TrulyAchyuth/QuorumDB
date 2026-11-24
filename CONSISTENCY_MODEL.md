@@ -1,7 +1,8 @@
 # Consistency model
 
-This document states exactly what a client can rely on. It covers a cluster of `N` voting nodes with fixed
-membership and a quorum of `⌊N/2⌋ + 1`.
+This document states exactly what a client can rely on. It covers a cluster of `N` voting nodes and a quorum
+of `⌊N/2⌋ + 1`. Membership can change one server at a time (`/api/v1/members`); every guarantee below holds
+across such changes, with `N` the size of the configuration in effect.
 
 ## Assumptions
 
@@ -12,7 +13,8 @@ purpose and shows the consequence.
 2. **Stable storage.** Anything a node has fsynced survives its crashes. With `fsync=false` this assumption
    does not hold for power loss, and safety can be lost.
 3. **Network.** The network may lose, delay, duplicate and reorder messages and may partition, but does not
-   forge or corrupt them undetected. Raft messages are not authenticated, so run on a private network.
+   forge or corrupt them undetected. Without TLS, Raft messages are not authenticated, so run on a private
+   network; with TLS on, the Raft port only accepts peers holding a certificate from the cluster CA.
 4. **No clock assumptions for safety.** Clocks only drive timeouts. Liveness needs eventually timely
    communication within a majority.
 

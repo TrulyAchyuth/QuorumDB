@@ -15,6 +15,7 @@ import io.quorumdb.server.config.ClusterConfig;
 import io.quorumdb.server.config.NodeProperties;
 import io.quorumdb.server.transport.GrpcTransport;
 import io.quorumdb.server.transport.NetworkFaults;
+import io.quorumdb.server.config.Tls;
 import io.quorumdb.storage.FaultyStorage;
 import io.quorumdb.storage.FileStorage;
 import org.slf4j.Logger;
@@ -43,7 +44,9 @@ import java.util.function.Supplier;
  * All Raft and state machine work happens on one dedicated thread (the "node thread", a single-threaded
  * scheduled executor), exactly as {@link RaftNode} requires. Other threads (HTTP handlers, gRPC) never
  * touch Raft state directly: they enqueue tasks and wait on futures. The node thread never blocks on
- * the network; storage writes do block it (that is where fsync happens).
+ * the network. WAL appends are written and fsynced by the storage's own writer thread, which reports
+ * progress back through {@link RaftNode#onPersisted()} on the node thread; the rarer storage writes (votes,
+ * truncation, snapshots) still block it.
  *
  * <h2>Group commit</h2>
  * Concurrent write requests are queued and drained in one batch per node-thread turn, so N concurrent
@@ -102,7 +105,7 @@ public final class NodeRuntime implements AutoCloseable {
             return t;
         });
         nodeThread.setRemoveOnCancelPolicy(true);
-        this.transport = new GrpcTransport(cluster, props.grpcPort(), faults, this::deliver);
+        this.transport = new GrpcTransport(cluster, props.grpcPort(), Tls.from(props), faults, this::deliver);
     }
 
     public void start() throws IOException {
@@ -111,6 +114,9 @@ public final class NodeRuntime implements AutoCloseable {
             fileStorage = new FileStorage(Path.of(props.dataDir()),
                     props.fsync() ? FileStorage.SyncMode.ALWAYS : FileStorage.SyncMode.NEVER, 16L << 20);
             storage = new FaultyStorage(fileStorage);
+            storage.setDurabilityListener(() -> nodeThread.execute(() -> {
+                if (!crashed && raft != null) safely(raft::onPersisted);
+            }));
             boot();
             return null;
         });
@@ -125,7 +131,8 @@ public final class NodeRuntime implements AutoCloseable {
         int inc = incarnation;
         RaftConfig config = new RaftConfig(cluster.self().id(), cluster.peerIds(), props.electionTimeoutMinMs(),
                 props.electionTimeoutMaxMs(), props.heartbeatIntervalMs(), 512, 4 << 20, props.snapshotThreshold(),
-                50_000, props.preVote(), props.checkQuorum(), false);
+                50_000, props.preVote(), props.checkQuorum(), false, props.snapshotTrailingEntries(),
+                props.join());
         Scheduler scheduler = new Scheduler() {
             @Override
             public long nowMs() {
@@ -142,7 +149,9 @@ public final class NodeRuntime implements AutoCloseable {
         };
         raft = new RaftNode(config, storage, kv, transport, scheduler, bound -> ThreadLocalRandom.current().nextLong(bound),
                 e -> {
-                    if (incarnation == inc) record(e);
+                    if (incarnation != inc) return;
+                    record(e);
+                    if (e.type() == RaftEvent.Type.MEMBERSHIP_CHANGED && raft != null) cluster.updateMembers(raft.members());
                 });
         raft.start();
         refreshStatus();
@@ -273,6 +282,32 @@ public final class NodeRuntime implements AutoCloseable {
             }
         }));
         return future;
+    }
+
+    /**
+     * Adds ({@code add}) or removes one voting member on this node, which must be the leader. Completes like a
+     * write; completes exceptionally with IllegalArgumentException for an invalid change.
+     */
+    public CompletableFuture<Outcomes.Proposal> changeMembership(boolean add, String specOrId) {
+        CompletableFuture<Outcomes.Proposal> future = new CompletableFuture<>();
+        nodeThread.execute(() -> safely(() -> {
+            if (crashed || raft == null) {
+                future.complete(new Outcomes.Proposal(Outcomes.Status.NOT_LEADER, 0, 0, null, null));
+                return;
+            }
+            try {
+                if (add) raft.addMember(specOrId, future::complete);
+                else raft.removeMember(specOrId, future::complete);
+            } catch (IllegalArgumentException e) {
+                future.completeExceptionally(e);
+            }
+        }));
+        return future;
+    }
+
+    /** Current voting members (specs) according to this node's log. */
+    public List<String> members() {
+        return call(() -> raft == null ? List.<String>of() : raft.members());
     }
 
     // =====================================================================================

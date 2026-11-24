@@ -98,6 +98,29 @@ class StorageContractTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"memory", "file"})
+    void snapshotCanKeepATailOfEntriesBeforeItsIndex(String kind) {
+        try (RaftStorage s = open(kind)) {
+            s.append(entries(1, 10, 1));
+            s.saveSnapshot(8, 1, "snap".getBytes(), 3);
+            assertThat(s.snapshotIndex()).isEqualTo(8);
+            assertThat(s.firstIndex()).as("entries 6..8 kept before the snapshot index").isEqualTo(6);
+            assertThat(s.lastIndex()).isEqualTo(10);
+            assertThat(s.entries(6, 10)).extracting(LogEntry::index).containsExactly(6L, 7L, 8L, 9L, 10L);
+            assertThat(s.termAt(7)).isEqualTo(1);
+            assertThatThrownBy(() -> s.entry(5)).isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(() -> s.truncateSuffix(8)).as("the tail is committed").isInstanceOf(IllegalArgumentException.class);
+
+            s.saveSnapshot(10, 1, "snap2".getBytes(), 0);
+            assertThat(s.firstIndex()).isEqualTo(11);
+            assertThat(s.lastIndex()).isEqualTo(10);
+            s.append(entries(11, 11, 2));
+            assertThat(s.firstIndex()).isEqualTo(11);
+            assertThat(s.lastIndex()).isEqualTo(11);
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"memory", "file"})
     void installSnapshotKeepsMatchingSuffixOtherwiseDiscardsLog(String kind) {
         try (RaftStorage s = open(kind)) {
             s.append(entries(1, 10, 1));
