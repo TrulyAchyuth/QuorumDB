@@ -187,9 +187,9 @@ same token, because nodes pass it on to each other.
   all public.
 - **Simulated FaultLab runs** (`POST /api/v1/faultlab/runs`, replays). They need no token and are bounded only
   by heap-derived limits, so any client can keep the simulation slots busy.
-- **The Raft port.** The gRPC port that nodes replicate over has no token check. Anyone who can reach it can
-  send Raft messages.
-- **The token in transit.** Over plain HTTP the token crosses the network in clear text, and nodes forward it
+- **The Raft port.** The gRPC port that nodes replicate over has no token check. When TLS is off, anyone who can
+  reach it can send Raft messages.
+- **The token in transit.** When TLS is off, the token crosses the network in clear text, and nodes forward it
   to each other when they forward requests or spread fault-injection commands. The dashboard keeps it in the
   browser tab's `sessionStorage`.
 - **Guessing.** There is no lockout or rate limit on failed attempts, so use a long random value
