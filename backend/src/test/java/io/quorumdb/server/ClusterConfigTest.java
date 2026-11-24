@@ -11,7 +11,7 @@ class ClusterConfigTest {
 
     private static NodeProperties props(String id, String peers, String token) {
         return new NodeProperties(id, "c1", "/tmp/x", 9101, peers, "http://localhost:8081/", 150, 300, 50, 1000, true, true,
-                true, 5000, 256, 1024, token, 100);
+                true, 5000, 256, 1024, token, 100, "", "", "");
     }
 
     @Test

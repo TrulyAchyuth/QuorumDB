@@ -1,5 +1,6 @@
 package io.quorumdb.server;
 
+import io.quorumdb.server.config.Tls;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -35,12 +36,17 @@ final class ProcessCluster implements AutoCloseable {
     private final int[] httpPorts;
     private final int[] grpcPorts;
     private final Map<String, Process> processes = new LinkedHashMap<>();
-    private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofMillis(500))
-            .version(HttpClient.Version.HTTP_1_1).build();
+    private final Path tls; // directory with ca.pem, node.pem, node.key; null = plaintext
+    private final String scheme;
+    private final HttpClient http;
 
-    ProcessCluster(Path dir, int size) throws IOException {
+    ProcessCluster(Path dir, int size, Path tls) throws IOException {
         this.dir = dir;
         this.size = size;
+        this.tls = tls;
+        this.scheme = tls == null ? "http" : "https";
+        this.http = Tls.httpClient(tls == null ? null
+                : Tls.of(tls.resolve("node.pem"), tls.resolve("node.key"), tls.resolve("ca.pem"))).build();
         this.httpPorts = new int[size + 1];
         this.grpcPorts = new int[size + 1];
         for (int i = 1; i <= size; i++) {
@@ -50,7 +56,12 @@ final class ProcessCluster implements AutoCloseable {
     }
 
     static ProcessCluster start(Path dir, int size) throws Exception {
-        ProcessCluster c = new ProcessCluster(dir, size);
+        return start(dir, size, null);
+    }
+
+    /** Starts the cluster with TLS on the Raft and HTTP ports if {@code tls} (see {@link #generateTls}) is given. */
+    static ProcessCluster start(Path dir, int size, Path tls) throws Exception {
+        ProcessCluster c = new ProcessCluster(dir, size, tls);
         for (int i = 1; i <= size; i++) c.startNode("n" + i);
         for (int i = 1; i <= size; i++) c.awaitHttp("n" + i);
         return c;
@@ -62,7 +73,8 @@ final class ProcessCluster implements AutoCloseable {
         for (int j = 1; j <= size; j++) {
             if (j == i) continue;
             if (!peers.isEmpty()) peers.append(',');
-            peers.append("n").append(j).append("=localhost:").append(grpcPorts[j]).append("=http://localhost:").append(httpPorts[j]);
+            peers.append("n").append(j).append("=localhost:").append(grpcPorts[j]).append("=").append(scheme)
+                    .append("://localhost:").append(httpPorts[j]);
         }
         String jar = System.getProperty("quorumdb.serverJar");
         if (jar == null || !Files.exists(Path.of(jar))) throw new IllegalStateException("server jar not built: " + jar);
@@ -70,8 +82,15 @@ final class ProcessCluster implements AutoCloseable {
         List<String> cmd = new ArrayList<>(List.of(java, "-Xmx256m", "-XX:TieredStopAtLevel=1", "-jar", jar,
                 "--server.port=" + httpPorts[i], "--quorumdb.node-id=" + id, "--quorumdb.grpc-port=" + grpcPorts[i],
                 "--quorumdb.data-dir=" + dir.resolve("data").resolve(id), "--quorumdb.peers=" + peers,
-                "--quorumdb.advertised-http=http://localhost:" + httpPorts[i], "--quorumdb.admin-token=" + TOKEN,
+                "--quorumdb.advertised-http=" + scheme + "://localhost:" + httpPorts[i], "--quorumdb.admin-token=" + TOKEN,
                 "--quorumdb.request-timeout-ms=3000"));
+        if (tls != null) {
+            String cert = tls.resolve("node.pem").toString();
+            String key = tls.resolve("node.key").toString();
+            cmd.addAll(List.of("--quorumdb.tls-cert=" + cert, "--quorumdb.tls-key=" + key,
+                    "--quorumdb.tls-ca=" + tls.resolve("ca.pem"), "--server.ssl.enabled=true",
+                    "--server.ssl.certificate=" + cert, "--server.ssl.certificate-private-key=" + key));
+        }
         Process p = new ProcessBuilder(cmd).redirectErrorStream(true)
                 .redirectOutput(ProcessBuilder.Redirect.appendTo(dir.resolve(id + ".log").toFile())).start();
         processes.put(id, p);
@@ -158,7 +177,42 @@ final class ProcessCluster implements AutoCloseable {
     }
 
     private URI uri(String id, String path) {
+        return URI.create(scheme + "://localhost:" + httpPorts[Integer.parseInt(id.substring(1))] + path);
+    }
+
+    /** Plain-HTTP URI for a node, to check that a TLS node does not serve it. */
+    URI plaintextUri(String id, String path) {
         return URI.create("http://localhost:" + httpPorts[Integer.parseInt(id.substring(1))] + path);
+    }
+
+    /**
+     * Creates a throwaway CA and one certificate for localhost (server and client use) with openssl.
+     * Skips the calling test if openssl is not installed.
+     */
+    static Path generateTls(Path dir) throws IOException, InterruptedException {
+        Files.createDirectories(dir);
+        Files.writeString(dir.resolve("ext.cnf"), "subjectAltName=DNS:localhost,IP:127.0.0.1\n"
+                + "extendedKeyUsage=serverAuth,clientAuth\nbasicConstraints=CA:FALSE\n");
+        List<List<String>> steps = List.of(
+                List.of("openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", "ca.key", "-out", "ca.pem",
+                        "-days", "2", "-subj", "/CN=quorumdb-test-ca", "-addext", "basicConstraints=critical,CA:TRUE",
+                        "-addext", "keyUsage=critical,keyCertSign"),
+                List.of("openssl", "req", "-newkey", "rsa:2048", "-nodes", "-keyout", "node.key", "-out", "node.csr",
+                        "-subj", "/CN=localhost"),
+                List.of("openssl", "x509", "-req", "-in", "node.csr", "-CA", "ca.pem", "-CAkey", "ca.key",
+                        "-CAcreateserial", "-out", "node.pem", "-days", "2", "-extfile", "ext.cnf"));
+        for (List<String> step : steps) {
+            Process p;
+            try {
+                p = new ProcessBuilder(step).directory(dir.toFile()).redirectErrorStream(true).start();
+            } catch (IOException e) {
+                org.junit.jupiter.api.Assumptions.abort("openssl is not available: " + e.getMessage());
+                throw e;
+            }
+            String out = new String(p.getInputStream().readAllBytes());
+            if (p.waitFor() != 0) throw new IllegalStateException(String.join(" ", step) + " failed:\n" + out);
+        }
+        return dir;
     }
 
     String logTail(String id) {

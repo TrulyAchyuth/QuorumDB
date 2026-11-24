@@ -75,6 +75,34 @@ class RealClusterIT {
     }
 
     @Test
+    void tlsClusterReplicatesOverMutualTlsAndServesHttps() throws Exception {
+        Path tls = ProcessCluster.generateTls(dir.resolve("tls"));
+        cluster = ProcessCluster.start(dir, 3, tls);
+        String leader = cluster.awaitLeader("n1", Duration.ofSeconds(20));
+        // Every node must have heard from the leader (first TLS handshakes take a moment) before we write.
+        for (String n : cluster.ids()) assertThat(cluster.awaitLeader(n, Duration.ofSeconds(20))).isEqualTo(leader);
+        evidence("TLS cluster elected " + leader + " over mutual-TLS gRPC");
+
+        String follower = other(leader);
+        Response put = cluster.put(follower, "secure", "yes");
+        assertThat(put.status()).as(put.raw()).isEqualTo(201);
+        assertThat(put.body().get("servedBy").asString()).as("forwarded to the leader over HTTPS").isEqualTo(leader);
+        for (String n : cluster.ids()) {
+            assertThat(cluster.get(n, "/api/v1/kv/secure").body().get("value").asString()).isEqualTo("yes");
+        }
+
+        java.net.http.HttpClient plain = java.net.http.HttpClient.newHttpClient();
+        int status;
+        try {
+            status = plain.send(java.net.http.HttpRequest.newBuilder(cluster.plaintextUri(leader, "/api/v1/kv/secure"))
+                    .build(), java.net.http.HttpResponse.BodyHandlers.discarding()).statusCode();
+        } catch (java.io.IOException e) {
+            status = -1;
+        }
+        assertThat(status).as("plain HTTP is not served on a TLS port").isNotEqualTo(200);
+    }
+
+    @Test
     void leaderSigkillFailsOverWithoutLosingAcknowledgedWritesAndTheNodeCatchesUp() throws Exception {
         cluster = ProcessCluster.start(dir, 3);
         String leader = cluster.awaitLeader("n1", Duration.ofSeconds(10));

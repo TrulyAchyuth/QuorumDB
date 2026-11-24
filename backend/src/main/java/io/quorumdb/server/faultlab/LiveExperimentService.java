@@ -19,6 +19,7 @@ import io.quorumdb.server.api.ClusterService;
 import io.quorumdb.server.api.NodeView;
 import io.quorumdb.server.api.PeerClient;
 import io.quorumdb.server.config.ClusterConfig;
+import io.quorumdb.server.config.Tls;
 import io.quorumdb.server.faults.LiveFaultRequest;
 import io.quorumdb.server.faults.LiveFaultService;
 import io.quorumdb.server.node.EventLog;
@@ -92,8 +93,7 @@ public class LiveExperimentService {
     private final RunStore store;
     private final AdminAuth auth;
     private final JsonMapper json;
-    private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofMillis(500))
-            .version(HttpClient.Version.HTTP_1_1).executor(Executors.newVirtualThreadPerTaskExecutor()).build();
+    private final HttpClient http;
     private final ExecutorService runner = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "faultlab-live");
         t.setDaemon(true);
@@ -108,6 +108,7 @@ public class LiveExperimentService {
         this.clusterService = clusterService;
         this.faults = faults;
         this.runtime = runtime;
+        this.http = Tls.httpClient(Tls.from(runtime.props())).executor(Executors.newVirtualThreadPerTaskExecutor()).build();
         this.store = store;
         this.auth = auth;
         this.json = json;

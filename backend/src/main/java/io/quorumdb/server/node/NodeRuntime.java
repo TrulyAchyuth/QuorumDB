@@ -15,6 +15,7 @@ import io.quorumdb.server.config.ClusterConfig;
 import io.quorumdb.server.config.NodeProperties;
 import io.quorumdb.server.transport.GrpcTransport;
 import io.quorumdb.server.transport.NetworkFaults;
+import io.quorumdb.server.config.Tls;
 import io.quorumdb.storage.FaultyStorage;
 import io.quorumdb.storage.FileStorage;
 import org.slf4j.Logger;
@@ -102,7 +103,7 @@ public final class NodeRuntime implements AutoCloseable {
             return t;
         });
         nodeThread.setRemoveOnCancelPolicy(true);
-        this.transport = new GrpcTransport(cluster, props.grpcPort(), faults, this::deliver);
+        this.transport = new GrpcTransport(cluster, props.grpcPort(), Tls.from(props), faults, this::deliver);
     }
 
     public void start() throws IOException {
