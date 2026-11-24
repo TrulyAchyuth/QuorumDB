@@ -7,10 +7,12 @@ import java.util.List;
 /**
  * Durable Raft state: hard state (term, vote), the log and the latest snapshot.
  *
- * <p>Contract: every mutating method returns only after the change is durable (to the degree the
- * implementation's sync policy promises). Raft's safety argument depends on this: a node must
- * never forget a vote it cast or an entry it acknowledged. Implementations signal I/O failure
- * with {@link StorageException}; the node then fail-stops rather than continue on unknown state.
+ * <p>Contract: every mutating method except {@link #append} returns only after the change is durable
+ * (to the degree the implementation's sync policy promises). {@code append} may return before the
+ * entries are durable; {@link #durableIndex()} says how far the log is durable, and the node acknowledges
+ * nothing above it. Raft's safety argument depends on this: a node must never forget a vote it cast or
+ * an entry it acknowledged. Implementations signal I/O failure with {@link StorageException}; the node
+ * then fail-stops rather than continue on unknown state.
  *
  * <p>Index model: the snapshot covers indexes {@code [1, snapshotIndex]}; the log holds exactly
  * the entries {@code (snapshotIndex, lastIndex]}. Not thread-safe; owned by the node thread.
@@ -46,8 +48,27 @@ public interface RaftStorage extends AutoCloseable {
     /** Entries in {@code [fromIndex, toIndexInclusive]}; both must be within the retained log. */
     List<LogEntry> entries(long fromIndex, long toIndexInclusive);
 
-    /** Appends entries; the first must have index {@code lastIndex() + 1} and they must be contiguous. */
+    /**
+     * Appends entries; the first must have index {@code lastIndex() + 1} and they must be contiguous. The
+     * entries are readable at once but may become durable later (see {@link #durableIndex()}).
+     */
     void append(List<LogEntry> entries);
+
+    /**
+     * Highest log index that is durable (at least {@link #snapshotIndex()}). Entries above it are readable
+     * but would be lost in a crash, so they must not be acknowledged yet.
+     *
+     * @throws StorageException if a background write failed
+     */
+    default long durableIndex() {
+        return lastIndex();
+    }
+
+    /**
+     * Registers a callback run, on a storage thread, after {@link #durableIndex()} advances or a background
+     * write fails. Implementations that are durable on return from {@link #append} never call it.
+     */
+    default void setDurabilityListener(Runnable listener) {}
 
     /** Removes every entry with index {@code >= fromIndex} (conflict resolution, Raft §5.3). */
     void truncateSuffix(long fromIndex);

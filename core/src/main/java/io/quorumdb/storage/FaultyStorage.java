@@ -43,6 +43,8 @@ public final class FaultyStorage implements RaftStorage {
     @Override public LogEntry entry(long index) { return delegate.entry(index); }
     @Override public List<LogEntry> entries(long from, long to) { return delegate.entries(from, to); }
     @Override public long diskUsageBytes() { return delegate.diskUsageBytes(); }
+    @Override public long durableIndex() { return delegate.durableIndex(); }
+    @Override public void setDurabilityListener(Runnable listener) { delegate.setDurabilityListener(listener); }
 
     @Override
     public void saveHardState(long term, String votedFor) {

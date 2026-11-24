@@ -43,7 +43,9 @@ import java.util.function.Supplier;
  * All Raft and state machine work happens on one dedicated thread (the "node thread", a single-threaded
  * scheduled executor), exactly as {@link RaftNode} requires. Other threads (HTTP handlers, gRPC) never
  * touch Raft state directly: they enqueue tasks and wait on futures. The node thread never blocks on
- * the network; storage writes do block it (that is where fsync happens).
+ * the network. WAL appends are written and fsynced by the storage's own writer thread, which reports
+ * progress back through {@link RaftNode#onPersisted()} on the node thread; the rarer storage writes (votes,
+ * truncation, snapshots) still block it.
  *
  * <h2>Group commit</h2>
  * Concurrent write requests are queued and drained in one batch per node-thread turn, so N concurrent
@@ -111,6 +113,9 @@ public final class NodeRuntime implements AutoCloseable {
             fileStorage = new FileStorage(Path.of(props.dataDir()),
                     props.fsync() ? FileStorage.SyncMode.ALWAYS : FileStorage.SyncMode.NEVER, 16L << 20);
             storage = new FaultyStorage(fileStorage);
+            storage.setDurabilityListener(() -> nodeThread.execute(() -> {
+                if (!crashed && raft != null) safely(raft::onPersisted);
+            }));
             boot();
             return null;
         });

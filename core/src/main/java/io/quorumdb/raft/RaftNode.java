@@ -40,9 +40,12 @@ import java.util.function.Consumer;
  * randomness. This is what allows the same class to run under the deterministic simulator.
  *
  * <h2>Durability ordering</h2>
- * Hard state and log changes are persisted through {@link RaftStorage} (which returns only once
- * durable) <em>before</em> any message that depends on them is sent. A storage failure is fatal:
- * the node fail-stops ({@link #failure()}) instead of running on state it cannot trust.
+ * Hard state, truncations and snapshots are persisted through {@link RaftStorage} (which returns only
+ * once durable) <em>before</em> any message that depends on them is sent. Log appends may become durable
+ * later, off this thread: a follower acknowledges entries only once {@link RaftStorage#durableIndex()}
+ * covers them, and a leader counts itself towards a majority only up to its own durable index. Storage
+ * reports progress through {@link #onPersisted()}. A storage failure is fatal: the node fail-stops
+ * ({@link #failure()}) instead of running on state it cannot trust.
  *
  * <h2>Commit / apply / acknowledge</h2>
  * An entry is <em>committed</em> once the leader that created it has replicated it on a majority
@@ -105,6 +108,10 @@ public final class RaftNode {
     private long eventSeq;
 
     private long lastLeaderContactMs = Long.MIN_VALUE / 2;
+
+    // follower: success reply held back until the entries it acknowledges are durable (0 = none)
+    private long awaitingAckIndex;
+    private long awaitingAckReadSeq;
     private Cancellable electionTimer;
     private Cancellable heartbeatTimer;
 
@@ -320,6 +327,25 @@ public final class RaftNode {
         return role == Role.LEADER ? id : leaderId;
     }
 
+    /**
+     * Storage made more of the log durable (or a background write failed). Must be called on the node
+     * thread; the leader may now commit, a follower sends the acknowledgement it was holding back.
+     */
+    public void onPersisted() {
+        if (!running) return;
+        guarded(() -> {
+            long durable = storage.durableIndex(); // throws if a background write failed: fail-stop
+            if (role == Role.LEADER) {
+                advanceCommitIndex();
+            } else if (role == Role.FOLLOWER && awaitingAckIndex > 0 && leaderId != null && durable >= awaitingAckIndex) {
+                transport.send(leaderId, new AppendEntriesReply(id, storage.currentTerm(), true, awaitingAckIndex,
+                        0, 0, awaitingAckReadSeq));
+                awaitingAckIndex = 0;
+                awaitingAckReadSeq = 0;
+            }
+        });
+    }
+
     // =====================================================================================
     // Message dispatch
     // =====================================================================================
@@ -470,6 +496,9 @@ public final class RaftNode {
         role = Role.FOLLOWER;
         leaderId = leader;
         votes.clear();
+        // A held-back acknowledgement was verified against the previous leader's log, not the next one's.
+        awaitingAckIndex = 0;
+        awaitingAckReadSeq = 0;
         if (wasLeader) {
             if (heartbeatTimer != null) heartbeatTimer.cancel();
             heartbeatTimer = null;
@@ -633,7 +662,7 @@ public final class RaftNode {
         long[] match = new long[progress.size() + 1];
         int i = 0;
         for (Progress p : progress.values()) match[i++] = p.matchIndex;
-        match[i] = storage.lastIndex();
+        match[i] = storage.durableIndex(); // the leader's own copy counts only once it is durable
         Arrays.sort(match);
         long majorityIndex = match[match.length - cfg.quorum()];
         if (majorityIndex > commitIndex && storage.termAt(majorityIndex) == storage.currentTerm()) {
@@ -699,6 +728,7 @@ public final class RaftNode {
                 emit(RaftEvent.Type.LOG_TRUNCATED, e.index(), storage.termAt(e.index()), 0, m.from(),
                         "removing [" + e.index() + ", " + storage.lastIndex() + "] conflicting with leader");
                 storage.truncateSuffix(e.index());
+                awaitingAckIndex = Math.min(awaitingAckIndex, e.index() - 1);
                 break;
             }
             firstNew++;
@@ -713,7 +743,13 @@ public final class RaftNode {
             long target = Math.min(m.leaderCommit(), lastNewIndex);
             if (target > commitIndex) setCommitIndex(target);
         }
-        reply(m, true, lastNewIndex, 0, 0);
+        if (storage.durableIndex() >= lastNewIndex) {
+            reply(m, true, lastNewIndex, 0, 0);
+        } else {
+            // Acknowledging now could promise entries a crash would lose; onPersisted() replies instead.
+            awaitingAckIndex = Math.max(awaitingAckIndex, lastNewIndex);
+            awaitingAckReadSeq = Math.max(awaitingAckReadSeq, m.readSeq());
+        }
     }
 
     private void reply(AppendEntries m, boolean success, long matchIndex, long conflictIndex, long conflictTerm) {

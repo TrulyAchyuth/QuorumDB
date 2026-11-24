@@ -29,9 +29,35 @@ class FileStorageRecoveryTest {
         for (LogEntry e : entries(from, to, term)) s.append(List.of(e));
     }
 
+    /** Appends are written in the background; wait for them before looking at the files. */
+    private static void awaitDurable(FileStorage s, long index) {
+        long deadline = System.nanoTime() + 5_000_000_000L;
+        while (s.durableIndex() < index) {
+            if (System.nanoTime() > deadline) throw new AssertionError("index " + index + " never became durable");
+            Thread.onSpinWait();
+        }
+    }
+
     private List<Path> segments() throws IOException {
         try (Stream<Path> s = Files.list(dir.resolve("wal"))) {
             return s.sorted().toList();
+        }
+    }
+
+    @Test
+    void appendsBecomeDurableInTheBackgroundAndNotifyTheListener() {
+        java.util.concurrent.atomic.AtomicBoolean ran = new java.util.concurrent.atomic.AtomicBoolean();
+        try (FileStorage s = open()) {
+            s.setDurabilityListener(() -> ran.set(true));
+            appendEach(s, 1, 30, 1);
+            assertThat(s.lastIndex()).as("readable immediately").isEqualTo(30);
+            awaitDurable(s, 30);
+            assertThat(s.durableIndex()).isEqualTo(30);
+            assertThat(ran).as("listener ran").isTrue();
+        }
+        try (FileStorage s = open()) {
+            assertThat(s.lastIndex()).isEqualTo(30);
+            assertThat(s.durableIndex()).isEqualTo(30);
         }
     }
 
@@ -65,6 +91,7 @@ class FileStorageRecoveryTest {
     void logRollsIntoSegmentsAndCompactionDeletesOldOnes() throws IOException {
         try (FileStorage s = open()) {
             appendEach(s, 1, 100, 1);
+            awaitDurable(s, 100);
             int before = segments().size();
             assertThat(before).as("small segment size forces several segments").isGreaterThan(3);
             s.saveSnapshot(90, 1, new byte[10]);

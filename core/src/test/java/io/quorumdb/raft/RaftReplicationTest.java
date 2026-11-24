@@ -385,6 +385,52 @@ class RaftReplicationTest {
         assertThat(after.saw(RaftEvent.Type.RECOVERY_COMPLETED)).isTrue();
     }
 
+    // ---------------------------------------------------------------- durability
+
+    @Test
+    void followerHoldsItsAcknowledgementUntilTheEntriesAreDurable() {
+        RaftHarness h = RaftHarness.classic();
+        h.lag.hold();
+        h.receive(append("n2", 1, 0, 0, 0, entry(1, 1, "a"), entry(2, 1, "b")));
+        assertThat(h.sent(AppendEntriesReply.class)).as("not durable yet: no acknowledgement").isEmpty();
+
+        h.lag.release();
+        h.node.onPersisted();
+        AppendEntriesReply reply = h.lastSent(AppendEntriesReply.class, "n2");
+        assertThat(reply.success()).isTrue();
+        assertThat(reply.matchIndex()).isEqualTo(2);
+    }
+
+    @Test
+    void heldAcknowledgementIsDroppedWhenANewLeaderTakesOver() {
+        RaftHarness h = RaftHarness.classic();
+        h.lag.hold();
+        h.receive(append("n2", 1, 0, 0, 0, entry(1, 1, "a")));
+        h.receive(append("n3", 2, 0, 0, 0)); // new leader, term 2: its log was not checked against entry 1
+        h.outbox.clear();
+        h.lag.release();
+        h.node.onPersisted();
+        assertThat(h.sent(AppendEntriesReply.class)).as("term-1 acknowledgement must not go to the term-2 leader")
+                .isEmpty();
+    }
+
+    @Test
+    void leaderCountsItsOwnCopyOnlyOnceItIsDurable() {
+        RaftHarness h = RaftHarness.classic();
+        h.lag.hold();
+        h.electLeader();
+        List<Outcomes.Proposal> results = new ArrayList<>();
+        h.node.propose("x".getBytes(), results::add);
+        h.ack("n2", 2); // n2 has the no-op and x durably; the leader's own copies are still being written
+        assertThat(h.node.commitIndex()).as("one durable copy of three is not a majority").isZero();
+        assertThat(results).isEmpty();
+
+        h.lag.release();
+        h.node.onPersisted();
+        assertThat(h.node.commitIndex()).isEqualTo(2);
+        assertThat(results).extracting(Outcomes.Proposal::status).containsExactly(Status.OK);
+    }
+
     // ---------------------------------------------------------------- failures
 
     @Test
