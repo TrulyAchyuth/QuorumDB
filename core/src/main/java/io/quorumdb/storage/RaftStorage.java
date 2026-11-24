@@ -12,8 +12,10 @@ import java.util.List;
  * never forget a vote it cast or an entry it acknowledged. Implementations signal I/O failure
  * with {@link StorageException}; the node then fail-stops rather than continue on unknown state.
  *
- * <p>Index model: the snapshot covers indexes {@code [1, snapshotIndex]}; the log holds exactly
- * the entries {@code (snapshotIndex, lastIndex]}. Not thread-safe; owned by the node thread.
+ * <p>Index model: the snapshot covers indexes {@code [1, snapshotIndex]}; the log holds the entries
+ * {@code [firstIndex, lastIndex]}, where {@code firstIndex <= snapshotIndex + 1}. Entries at or before
+ * {@code snapshotIndex} are an optional tail kept after a local snapshot; they are committed and match
+ * the snapshot. Not thread-safe; owned by the node thread.
  */
 public interface RaftStorage extends AutoCloseable {
 
@@ -32,11 +34,17 @@ public interface RaftStorage extends AutoCloseable {
     /** @return the snapshot payload, or null if no snapshot exists */
     byte[] loadSnapshot();
 
+    /** Index of the first retained log entry; {@code snapshotIndex() + 1} when no tail is kept. */
+    default long firstIndex() {
+        return snapshotIndex() + 1;
+    }
+
     /** Index of the last log entry, or {@link #snapshotIndex()} if the log is empty. */
     long lastIndex();
 
     /**
-     * @return term of the entry at {@code index}; works for {@code snapshotIndex} too; 0 for index 0
+     * @return term of the entry at {@code index} in {@code [firstIndex, lastIndex]}; works for
+     *         {@code snapshotIndex} too; 0 for index 0
      * @throws IllegalArgumentException if the index is compacted away or beyond the log
      */
     long termAt(long index);
@@ -56,11 +64,20 @@ public interface RaftStorage extends AutoCloseable {
      * Saves a snapshot taken locally at {@code index} (which must be in the log) and compacts the
      * log prefix up to and including it.
      */
-    void saveSnapshot(long index, long term, byte[] data);
+    default void saveSnapshot(long index, long term, byte[] data) {
+        saveSnapshot(index, term, data, 0);
+    }
+
+    /**
+     * Saves a snapshot taken locally at {@code index} (which must be in the log) and compacts the log
+     * prefix, keeping the last {@code trailingEntries} entries at or before {@code index}.
+     */
+    void saveSnapshot(long index, long term, byte[] data, long trailingEntries);
 
     /**
      * Installs a snapshot received from the leader. Retains the log suffix after {@code index} only if
-     * the log contains a matching entry at {@code index}; otherwise the whole log is discarded.
+     * the log contains a matching entry at {@code index}; otherwise the whole log is discarded. No tail
+     * at or before {@code index} is kept.
      */
     void installSnapshot(long index, long term, byte[] data);
 

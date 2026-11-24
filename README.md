@@ -140,8 +140,9 @@ latency; see [BENCHMARKS.md](BENCHMARKS.md) for methodology and caveats.
 - **Durability depends on fsync.** On macOS `FileChannel.force` is `fsync`, not `F_FULLFSYNC`; power-loss durability is weaker there than on Linux.
 - **Live FaultLab** orders events from different nodes by their local clocks: accurate on one host, approximate across hosts. Live runs cannot be replayed exactly.
 - FaultLab's checkers find violations in what they observe; passing runs are evidence, not proof of correctness.
-- **Snapshots compact the log right up to the applied index**, so a follower only a few entries behind receives
-  the whole snapshot (one 300 KB message per follower per snapshot in the benchmarks) instead of a few entries.
+- **Snapshot tail is bounded.** Each snapshot keeps the last `quorumdb.snapshot-trailing-entries` (default 1000)
+  log entries before its index, so a follower at most that many entries behind is sent entries. One further behind still
+  receives the whole snapshot.
 - **Simulated FaultLab runs need no token.** They are bounded by heap-derived limits (422 `RUN_TOO_LARGE`), but
   any client can keep the simulation slots busy; keep the API on a private network.
 - **Live FaultLab reports** count the time before the run's first observed election as leaderless (see

@@ -545,8 +545,10 @@ public final class RaftNode {
      */
     private void sendAppend(String peer, Progress p, boolean force) {
         long now = scheduler.nowMs();
-        if (p.nextIndex <= storage.snapshotIndex()) {
-            // The entries this follower needs were compacted away: ship the snapshot. Still send a
+        long prev = p.nextIndex - 1;
+        if (prev != storage.snapshotIndex() && prev < storage.firstIndex()) {
+            // The entries this follower needs were compacted away (they are not even in the tail kept after
+            // the snapshot, and the term of the entry before them is unknown): ship the snapshot. Still send a
             // heartbeat so it keeps recognising us while the (potentially large) snapshot is in flight.
             if (force) {
                 transport.send(peer, new AppendEntries(id, storage.currentTerm(), storage.snapshotIndex(),
@@ -781,7 +783,7 @@ public final class RaftNode {
         long index = lastApplied;
         long term = storage.termAt(index);
         byte[] data = stateMachine.snapshot();
-        storage.saveSnapshot(index, term, data);
+        storage.saveSnapshot(index, term, data, cfg.snapshotTrailingEntries());
         emit(RaftEvent.Type.SNAPSHOT_CREATED, index, term, 0, null, data.length + " bytes");
     }
 

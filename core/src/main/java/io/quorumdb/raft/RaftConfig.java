@@ -17,12 +17,22 @@ import java.util.List;
  * @param preVote                run a non-disruptive pre-vote round before real elections (Ongaro thesis §9.6)
  * @param checkQuorum            leader steps down when it has not heard from a majority for an election timeout
  * @param emitHeartbeatEvents    whether HEARTBEAT_SENT events are emitted (noisy on real clusters)
+ * @param snapshotTrailingEntries log entries kept at and before a local snapshot's index, so a follower that is
+ *                               only slightly behind is sent entries instead of the whole snapshot (0 = none)
  */
 public record RaftConfig(String nodeId, List<String> peers,
                          long electionTimeoutMinMs, long electionTimeoutMaxMs, long heartbeatIntervalMs,
                          int maxEntriesPerAppend, int maxBytesPerAppend, long snapshotThreshold,
                          int maxPendingProposals, boolean preVote, boolean checkQuorum,
-                         boolean emitHeartbeatEvents) {
+                         boolean emitHeartbeatEvents, long snapshotTrailingEntries) {
+
+    public RaftConfig(String nodeId, List<String> peers,
+                      long electionTimeoutMinMs, long electionTimeoutMaxMs, long heartbeatIntervalMs,
+                      int maxEntriesPerAppend, int maxBytesPerAppend, long snapshotThreshold,
+                      int maxPendingProposals, boolean preVote, boolean checkQuorum, boolean emitHeartbeatEvents) {
+        this(nodeId, peers, electionTimeoutMinMs, electionTimeoutMaxMs, heartbeatIntervalMs, maxEntriesPerAppend,
+                maxBytesPerAppend, snapshotThreshold, maxPendingProposals, preVote, checkQuorum, emitHeartbeatEvents, 0);
+    }
 
     public RaftConfig {
         if (nodeId == null || nodeId.isBlank()) throw new IllegalArgumentException("nodeId is required");
@@ -35,7 +45,8 @@ public record RaftConfig(String nodeId, List<String> peers,
         if (heartbeatIntervalMs <= 0 || heartbeatIntervalMs * 2 > electionTimeoutMinMs) {
             throw new IllegalArgumentException("heartbeat interval must be at most half the minimum election timeout");
         }
-        if (maxEntriesPerAppend < 1 || maxBytesPerAppend < 1 || maxPendingProposals < 1 || snapshotThreshold < 0) {
+        if (maxEntriesPerAppend < 1 || maxBytesPerAppend < 1 || maxPendingProposals < 1 || snapshotThreshold < 0
+                || snapshotTrailingEntries < 0) {
             throw new IllegalArgumentException("batching/snapshot limits must be positive");
         }
     }
@@ -56,30 +67,36 @@ public record RaftConfig(String nodeId, List<String> peers,
     public RaftConfig withPreVote(boolean value) {
         return new RaftConfig(nodeId, peers, electionTimeoutMinMs, electionTimeoutMaxMs, heartbeatIntervalMs,
                 maxEntriesPerAppend, maxBytesPerAppend, snapshotThreshold, maxPendingProposals, value, checkQuorum,
-                emitHeartbeatEvents);
+                emitHeartbeatEvents, snapshotTrailingEntries);
     }
 
     public RaftConfig withSnapshotThreshold(long value) {
         return new RaftConfig(nodeId, peers, electionTimeoutMinMs, electionTimeoutMaxMs, heartbeatIntervalMs,
                 maxEntriesPerAppend, maxBytesPerAppend, value, maxPendingProposals, preVote, checkQuorum,
-                emitHeartbeatEvents);
+                emitHeartbeatEvents, snapshotTrailingEntries);
     }
 
     public RaftConfig withTimings(long electionMinMs, long electionMaxMs, long heartbeatMs) {
         return new RaftConfig(nodeId, peers, electionMinMs, electionMaxMs, heartbeatMs,
                 maxEntriesPerAppend, maxBytesPerAppend, snapshotThreshold, maxPendingProposals, preVote, checkQuorum,
-                emitHeartbeatEvents);
+                emitHeartbeatEvents, snapshotTrailingEntries);
     }
 
     public RaftConfig withCheckQuorum(boolean value) {
         return new RaftConfig(nodeId, peers, electionTimeoutMinMs, electionTimeoutMaxMs, heartbeatIntervalMs,
                 maxEntriesPerAppend, maxBytesPerAppend, snapshotThreshold, maxPendingProposals, preVote, value,
-                emitHeartbeatEvents);
+                emitHeartbeatEvents, snapshotTrailingEntries);
     }
 
     public RaftConfig withHeartbeatEvents(boolean value) {
         return new RaftConfig(nodeId, peers, electionTimeoutMinMs, electionTimeoutMaxMs, heartbeatIntervalMs,
                 maxEntriesPerAppend, maxBytesPerAppend, snapshotThreshold, maxPendingProposals, preVote, checkQuorum,
-                value);
+                value, snapshotTrailingEntries);
+    }
+
+    public RaftConfig withSnapshotTrailingEntries(long value) {
+        return new RaftConfig(nodeId, peers, electionTimeoutMinMs, electionTimeoutMaxMs, heartbeatIntervalMs,
+                maxEntriesPerAppend, maxBytesPerAppend, snapshotThreshold, maxPendingProposals, preVote, checkQuorum,
+                emitHeartbeatEvents, value);
     }
 }

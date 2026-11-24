@@ -125,7 +125,7 @@ public final class NodeRuntime implements AutoCloseable {
         int inc = incarnation;
         RaftConfig config = new RaftConfig(cluster.self().id(), cluster.peerIds(), props.electionTimeoutMinMs(),
                 props.electionTimeoutMaxMs(), props.heartbeatIntervalMs(), 512, 4 << 20, props.snapshotThreshold(),
-                50_000, props.preVote(), props.checkQuorum(), false);
+                50_000, props.preVote(), props.checkQuorum(), false, props.snapshotTrailingEntries());
         Scheduler scheduler = new Scheduler() {
             @Override
             public long nowMs() {

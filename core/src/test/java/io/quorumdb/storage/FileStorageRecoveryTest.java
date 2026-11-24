@@ -36,6 +36,44 @@ class FileStorageRecoveryTest {
     }
 
     @Test
+    void snapshotTailSurvivesReopenIfItMatchesTheSnapshot() {
+        try (FileStorage s = open()) {
+            appendEach(s, 1, 40, 1);
+            s.saveSnapshot(35, 1, "snap".getBytes(), 10);
+            assertThat(s.firstIndex()).isEqualTo(26);
+        }
+        try (FileStorage s = open()) {
+            assertThat(s.snapshotIndex()).isEqualTo(35);
+            assertThat(s.firstIndex()).as("at least the configured tail is back (whole segments are kept)")
+                    .isLessThanOrEqualTo(26);
+            assertThat(s.termAt(30)).isEqualTo(1);
+            assertThat(s.lastIndex()).isEqualTo(40);
+        }
+    }
+
+    @Test
+    void entriesBeforeTheSnapshotAreDroppedOnReopenIfTheyDoNotMatchIt() throws IOException {
+        try (FileStorage s = open()) {
+            appendEach(s, 1, 20, 1);
+        }
+        Path backup = dir.resolveSibling(dir.getFileName() + "-wal-backup");
+        Files.createDirectories(backup);
+        for (Path segment : segments()) Files.copy(segment, backup.resolve(segment.getFileName()));
+        try (FileStorage s = open()) {
+            s.installSnapshot(15, 2, "snap".getBytes()); // a leader's snapshot; our entry 15 (term 1) does not match
+        }
+        // Crash after the snapshot became durable but before the old log was removed.
+        try (Stream<Path> files = Files.list(backup)) {
+            for (Path segment : files.toList()) Files.copy(segment, dir.resolve("wal").resolve(segment.getFileName()));
+        }
+        try (FileStorage s = open()) {
+            assertThat(s.snapshotIndex()).isEqualTo(15);
+            assertThat(s.firstIndex()).as("old entries 1..15 must not pass for the snapshot's history").isEqualTo(16);
+            assertThatThrownBy(() -> s.entry(15)).isInstanceOf(IllegalArgumentException.class);
+        }
+    }
+
+    @Test
     void everythingSurvivesReopen() {
         try (FileStorage s = open()) {
             s.saveHardState(7, "n3");
