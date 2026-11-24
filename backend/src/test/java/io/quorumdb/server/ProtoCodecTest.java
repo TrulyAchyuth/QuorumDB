@@ -28,13 +28,18 @@ class ProtoCodecTest {
                 new RaftMessage.RequestVote("n1", 5, 10, 4, true),
                 new RaftMessage.RequestVoteReply("n1", 5, 6, true, false),
                 new RaftMessage.AppendEntriesReply("n1", 5, false, 0, 7, 3, 9),
-                new RaftMessage.InstallSnapshot("n1", 5, 100, 4, new byte[] {1, 2, 3}, 2));
+                new RaftMessage.InstallSnapshot("n1", 5, 100, 4, new byte[] {1, 2, 3}, 2),
+                new RaftMessage.InstallSnapshot("n1", 5, 100, 4, 4096, new byte[] {4, 5}, true, 3),
+                new RaftMessage.InstallSnapshotReply("n1", 5, 100, 4098, 3));
         for (RaftMessage m : messages) {
             RaftMessage back = roundTrip(m);
             if (m instanceof RaftMessage.InstallSnapshot s) {
                 RaftMessage.InstallSnapshot b = (RaftMessage.InstallSnapshot) back;
                 assertThat(b.data()).containsExactly(s.data());
                 assertThat(b.lastIncludedIndex()).isEqualTo(100);
+                assertThat(b.offset()).isEqualTo(s.offset());
+                assertThat(b.more()).isEqualTo(s.more());
+                assertThat(b.readSeq()).isEqualTo(s.readSeq());
             } else {
                 assertThat(back).isEqualTo(m);
             }

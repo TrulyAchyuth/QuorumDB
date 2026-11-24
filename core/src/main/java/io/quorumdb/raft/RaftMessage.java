@@ -49,7 +49,28 @@ public sealed interface RaftMessage {
     record AppendEntriesReply(String from, long term, boolean success, long matchIndex,
                               long conflictIndex, long conflictTerm, long readSeq) implements RaftMessage {}
 
-    /** InstallSnapshot RPC (Raft §7), sent as a single chunk. */
+    /**
+     * One chunk of an InstallSnapshot RPC (Raft §7, Figure 13).
+     *
+     * @param offset byte offset of {@code data} within the snapshot
+     * @param more   true if further chunks follow; false for the last (or only) chunk
+     */
     record InstallSnapshot(String from, long term, long lastIncludedIndex, long lastIncludedTerm,
-                           byte[] data, long readSeq) implements RaftMessage {}
+                           long offset, byte[] data, boolean more, long readSeq) implements RaftMessage {
+
+        /** The whole snapshot in one message. */
+        public InstallSnapshot(String from, long term, long lastIncludedIndex, long lastIncludedTerm,
+                               byte[] data, long readSeq) {
+            this(from, term, lastIncludedIndex, lastIncludedTerm, 0, data, false, readSeq);
+        }
+    }
+
+    /**
+     * Acknowledges a non-final InstallSnapshot chunk. The last chunk is answered with an
+     * {@link AppendEntriesReply} instead, as for a snapshot sent in one message.
+     *
+     * @param nextOffset bytes of the snapshot at {@code lastIncludedIndex} received so far
+     */
+    record InstallSnapshotReply(String from, long term, long lastIncludedIndex, long nextOffset, long readSeq)
+            implements RaftMessage {}
 }

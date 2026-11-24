@@ -78,11 +78,16 @@ final class RaftHarness {
     }
 
     RaftHarness(int clusterSize, boolean preVote, boolean checkQuorum, long snapshotThreshold, MemoryStorage disk) {
+        this(clusterSize, preVote, checkQuorum, snapshotThreshold, disk, 1 << 20);
+    }
+
+    RaftHarness(int clusterSize, boolean preVote, boolean checkQuorum, long snapshotThreshold, MemoryStorage disk,
+                int maxBytesPerAppend) {
         this.disk = disk;
         this.storage = new FaultyStorage(disk);
         List<String> peers = new ArrayList<>();
         for (int i = 2; i <= clusterSize; i++) peers.add("n" + i);
-        RaftConfig config = new RaftConfig("n1", peers, ELECTION_TIMEOUT, ELECTION_TIMEOUT * 2, HEARTBEAT, 100, 1 << 20,
+        RaftConfig config = new RaftConfig("n1", peers, ELECTION_TIMEOUT, ELECTION_TIMEOUT * 2, HEARTBEAT, 100, maxBytesPerAppend,
                 snapshotThreshold, 100, preVote, checkQuorum, true);
         node = new RaftNode(config, storage, machine, (to, m) -> outbox.add(new Sent(to, m)), scheduler, bound -> 0,
                 events::add);

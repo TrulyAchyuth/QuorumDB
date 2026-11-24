@@ -136,7 +136,9 @@ latency; see [BENCHMARKS.md](BENCHMARKS.md) for methodology and caveats.
 - **Fixed membership.** No joint consensus or single-server membership changes.
 - **No TLS or authentication on the Raft and client ports**; the admin token only guards fault injection. Run on a private network.
 - **Storage runs on the Raft thread.** fsync blocks the node thread, so reads queue behind writes under mixed load (see the mixed-workload benchmark).
-- **Whole-state snapshots in memory**, sent in a single InstallSnapshot message (fine for MB-scale data, not GB).
+- **Whole-state snapshots in memory.** InstallSnapshot is sent in chunks of at most 4 MB, one chunk in flight per
+  follower, but both sides still hold the whole snapshot in memory (fine for MB-scale data, not GB). A lost chunk
+  restarts that follower's transfer from the beginning after an election timeout.
 - **Durability depends on fsync.** On macOS `FileChannel.force` is `fsync`, not `F_FULLFSYNC`; power-loss durability is weaker there than on Linux.
 - **Live FaultLab** orders events from different nodes by their local clocks: accurate on one host, approximate across hosts. Live runs cannot be replayed exactly.
 - FaultLab's checkers find violations in what they observe; passing runs are evidence, not proof of correctness.
