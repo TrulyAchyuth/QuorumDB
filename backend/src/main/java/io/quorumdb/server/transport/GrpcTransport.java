@@ -12,6 +12,7 @@ import io.quorumdb.rpc.Ack;
 import io.quorumdb.rpc.Envelope;
 import io.quorumdb.rpc.RaftTransportGrpc;
 import io.quorumdb.server.config.ClusterConfig;
+import io.quorumdb.server.config.Tls;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -58,6 +59,7 @@ public final class GrpcTransport implements Transport, AutoCloseable {
                            boolean faultBlocked) {}
 
     private final ClusterConfig cluster;
+    private final Tls tls;
     private final NetworkFaults faults;
     private final Consumer<RaftMessage> inbound;
     private final Server server;
@@ -70,15 +72,18 @@ public final class GrpcTransport implements Transport, AutoCloseable {
         return t;
     });
 
-    public GrpcTransport(ClusterConfig cluster, int port, NetworkFaults faults, Consumer<RaftMessage> inbound) {
+    /** @param tls mutual TLS for the Raft port and outgoing connections, or null for plaintext */
+    public GrpcTransport(ClusterConfig cluster, int port, Tls tls, NetworkFaults faults, Consumer<RaftMessage> inbound) {
         this.cluster = cluster;
+        this.tls = tls;
         this.faults = faults;
         this.inbound = inbound;
         for (String peer : cluster.peerIds()) stats.put(peer, new PeerStats());
-        this.server = NettyServerBuilder.forPort(port)
+        NettyServerBuilder builder = NettyServerBuilder.forPort(port)
                 .maxInboundMessageSize(MAX_MESSAGE_BYTES)
-                .addService(new Service())
-                .build();
+                .addService(new Service());
+        if (tls != null) builder.sslContext(tls.grpcServer());
+        this.server = builder.build();
     }
 
     public void start() throws IOException {
@@ -138,11 +143,15 @@ public final class GrpcTransport implements Transport, AutoCloseable {
 
     private RaftTransportGrpc.RaftTransportStub stub(String peer) {
         return stubs.computeIfAbsent(peer, p -> {
-            ManagedChannel channel = NettyChannelBuilder.forTarget(cluster.peers().get(p).raftAddress())
-                    .usePlaintext()
+            NettyChannelBuilder builder = NettyChannelBuilder.forTarget(cluster.peers().get(p).raftAddress())
                     .maxInboundMessageSize(MAX_MESSAGE_BYTES)
-                    .keepAliveTime(30, TimeUnit.SECONDS)
-                    .build();
+                    .keepAliveTime(30, TimeUnit.SECONDS);
+            if (tls == null) {
+                builder.usePlaintext();
+            } else {
+                builder.sslContext(tls.grpcClient());
+            }
+            ManagedChannel channel = builder.build();
             channels.put(p, channel);
             return RaftTransportGrpc.newStub(channel);
         });

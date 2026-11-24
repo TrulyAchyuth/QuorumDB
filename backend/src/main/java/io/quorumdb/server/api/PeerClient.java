@@ -1,6 +1,8 @@
 package io.quorumdb.server.api;
 
 import io.quorumdb.server.config.ClusterConfig;
+import io.quorumdb.server.config.NodeProperties;
+import io.quorumdb.server.config.Tls;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -20,12 +22,12 @@ public class PeerClient {
     private static final Set<String> COPIED_REQUEST_HEADERS = Set.of("content-type", "x-client-id", "x-request-seq",
             "authorization");
 
-    private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofMillis(500))
-            .version(HttpClient.Version.HTTP_1_1).build();
+    private final HttpClient http;
     private final ClusterConfig cluster;
 
-    public PeerClient(ClusterConfig cluster) {
+    public PeerClient(ClusterConfig cluster, NodeProperties props) {
         this.cluster = cluster;
+        this.http = Tls.httpClient(Tls.from(props)).build();
     }
 
     public record Response(int status, Map<String, java.util.List<String>> headers, byte[] body) {}
