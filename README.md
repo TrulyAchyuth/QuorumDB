@@ -164,6 +164,40 @@ latency; see [BENCHMARKS.md](BENCHMARKS.md) for methodology and caveats.
 [docs/PRIOR_ART.md](docs/PRIOR_ART.md) · [docs/PROGRESS.md](docs/PROGRESS.md) ·
 [docs/HANDOVER.md](docs/HANDOVER.md)
 
+## Security
+
+QuorumDB has one secret, the admin token (`quorumdb.admin-token`, or `QUORUMDB_ADMIN_TOKEN`). Requests that
+need it send `Authorization: Bearer <token>`; the comparison is constant-time. With no token configured
+(the default), those endpoints are switched off and answer `403 ADMIN_DISABLED`. Every node must use the
+same token, because nodes pass it on to each other.
+
+**What the token protects**
+
+- Live fault injection: `POST`/`DELETE /api/v1/faults` and the node-to-node `POST /api/v1/internal/faults`.
+- Forcing a snapshot: `POST /api/v1/snapshot`.
+- Starting a live FaultLab experiment: `POST /api/v1/faultlab/live-runs`.
+- `GET /api/v1/internal/log` (index, term and checksum of each log entry, used by the live safety audit).
+
+**What it does not protect**
+
+- **Your data.** Reads, writes, deletes, batches and prefix scans under `/api/v1/kv` and `/api/v1/batch` need
+  no credentials. Anyone who can reach a node's HTTP port can read and change every key.
+- **Monitoring and history.** Health, node and cluster status, metrics (including Prometheus), Raft events,
+  the operations log (which shows keys), configuration, the list of active faults, and the live-run status are
+  all public.
+- **Simulated FaultLab runs** (`POST /api/v1/faultlab/runs`, replays). They need no token and are bounded only
+  by heap-derived limits, so any client can keep the simulation slots busy.
+- **The Raft port.** The gRPC port that nodes replicate over has no token check. Anyone who can reach it can
+  send Raft messages.
+- **The token in transit.** Over plain HTTP the token crosses the network in clear text, and nodes forward it
+  to each other when they forward requests or spread fault-injection commands. The dashboard keeps it in the
+  browser tab's `sessionStorage`.
+- **Guessing.** There is no lockout or rate limit on failed attempts, so use a long random value
+  (`openssl rand -hex 24`).
+
+The token is a safety catch on the disruptive testing features, not access control. Run QuorumDB on a private
+network that only trusted clients can reach.
+
 ## Known limitations
 
 - **Fixed membership.** No joint consensus or single-server membership changes.
