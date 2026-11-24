@@ -27,6 +27,7 @@ final class RaftHarness {
 
     final MemoryStorage disk;
     final FaultyStorage storage;
+    final LaggingStorage lag;
     final List<Sent> outbox = new ArrayList<>();
     final List<RaftEvent> events = new ArrayList<>();
     final List<String> applied = new ArrayList<>();
@@ -79,7 +80,8 @@ final class RaftHarness {
 
     RaftHarness(int clusterSize, boolean preVote, boolean checkQuorum, long snapshotThreshold, MemoryStorage disk) {
         this.disk = disk;
-        this.storage = new FaultyStorage(disk);
+        this.lag = new LaggingStorage(disk);
+        this.storage = new FaultyStorage(lag);
         List<String> peers = new ArrayList<>();
         for (int i = 2; i <= clusterSize; i++) peers.add("n" + i);
         RaftConfig config = new RaftConfig("n1", peers, ELECTION_TIMEOUT, ELECTION_TIMEOUT * 2, HEARTBEAT, 100, 1 << 20,

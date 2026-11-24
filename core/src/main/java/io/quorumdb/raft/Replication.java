@@ -146,7 +146,7 @@ final class Replication {
         long[] match = new long[n.progress.size() + 1];
         int i = 0;
         for (Progress p : n.progress.values()) match[i++] = p.matchIndex;
-        match[i] = storage.lastIndex();
+        match[i] = storage.durableIndex(); // the leader's own copy counts only once it is durable
         Arrays.sort(match);
         long majorityIndex = match[match.length - cfg.quorum()];
         if (majorityIndex > n.commitIndex && storage.termAt(majorityIndex) == storage.currentTerm()) {
@@ -210,6 +210,7 @@ final class Replication {
                 n.emit(RaftEvent.Type.LOG_TRUNCATED, e.index(), storage.termAt(e.index()), 0, m.from(),
                         "removing [" + e.index() + ", " + storage.lastIndex() + "] conflicting with leader");
                 storage.truncateSuffix(e.index());
+                n.awaitingAckIndex = Math.min(n.awaitingAckIndex, e.index() - 1);
                 break;
             }
             firstNew++;
@@ -224,7 +225,13 @@ final class Replication {
             long target = Math.min(m.leaderCommit(), lastNewIndex);
             if (target > n.commitIndex) n.setCommitIndex(target);
         }
-        reply(m, true, lastNewIndex, 0, 0);
+        if (storage.durableIndex() >= lastNewIndex) {
+            reply(m, true, lastNewIndex, 0, 0);
+        } else {
+            // Acknowledging now could promise entries a crash would lose; onPersisted() replies instead.
+            n.awaitingAckIndex = Math.max(n.awaitingAckIndex, lastNewIndex);
+            n.awaitingAckReadSeq = Math.max(n.awaitingAckReadSeq, m.readSeq());
+        }
     }
 
     private void reply(AppendEntries m, boolean success, long matchIndex, long conflictIndex, long conflictTerm) {

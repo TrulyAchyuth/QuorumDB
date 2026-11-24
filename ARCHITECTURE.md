@@ -57,9 +57,11 @@ flowchart TB
 - **One thread owns all Raft state** (`NodeRuntime`). HTTP and gRPC threads never touch it; they submit
   tasks and wait on futures. There are no locks inside the consensus code.
 - **Group commit**: concurrent writes are queued and proposed as one batch per node-thread turn: one WAL
-  append and one fsync for the whole batch.
-- **Durability ordering**: `RaftStorage` methods return only after the data is durable, and Raft persists
-  before it sends anything that depends on the write (votes, acknowledgements).
+  append for the whole batch. The WAL writer thread then fsyncs once for everything queued behind it.
+- **Durability ordering**: votes, truncations and snapshots are durable before the `RaftStorage` call
+  returns. Log appends are written and fsynced by a separate WAL writer thread, so the node thread does not
+  wait for the disk. `durableIndex()` reports how far the log is durable: a follower acknowledges entries
+  only once they are durable, and a leader counts its own copy towards a majority only once it is durable.
 - **Fail-stop**: any storage error stops the Raft node rather than continuing on state it cannot trust.
 
 ## Write path
@@ -73,9 +75,9 @@ sequenceDiagram
   C->>F: PUT /api/v1/kv/k
   F->>F: propose -> NOT_LEADER (hint L)
   F->>L: forward HTTP request
-  L->>L: append to WAL (fsync, batched)
+  L->>L: append (WAL writer fsyncs in the background)
   L->>P: AppendEntries (gRPC)
-  P->>P: append + fsync
+  P->>P: append, wait until durable
   P-->>L: AppendEntriesReply(match)
   L->>L: majority match -> commit -> apply
   L-->>F: 201 {index, term, version}
@@ -109,7 +111,8 @@ optional Prometheus (`--profile metrics`). `scripts/cluster.sh` does the same wi
 
 | Component | Threads | Shared state protection |
 |---|---|---|
-| `RaftNode`, `KvStateMachine`, `FileStorage` | node thread only | none needed |
+| `RaftNode`, `KvStateMachine` | node thread only | none needed |
+| `FileStorage` | node thread + its WAL writer thread | single-thread executor; the node thread waits for queued writes before truncating or compacting |
 | `EventLog`, `OperationLog`, `RequestMetrics` | any | `synchronized` |
 | `NetworkFaults` | any | concurrent collections, volatile fields |
 | `GrpcTransport` stats | gRPC + node thread | atomics |

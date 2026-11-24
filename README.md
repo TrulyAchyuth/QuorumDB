@@ -135,7 +135,9 @@ latency; see [BENCHMARKS.md](BENCHMARKS.md) for methodology and caveats.
 
 - **Fixed membership.** No joint consensus or single-server membership changes.
 - **No TLS or authentication on the Raft and client ports**; the admin token only guards fault injection. Run on a private network.
-- **Storage runs on the Raft thread.** fsync blocks the node thread, so reads queue behind writes under mixed load (see the mixed-workload benchmark).
+- **WAL appends are off the Raft thread, other storage writes are not.** Appends and their fsync run on a WAL writer
+  thread; votes, truncations and snapshots still block the node thread. The mixed-workload benchmark predates this
+  change and has not been re-run.
 - **Whole-state snapshots in memory**, sent in a single InstallSnapshot message (fine for MB-scale data, not GB).
 - **Durability depends on fsync.** On macOS `FileChannel.force` is `fsync`, not `F_FULLFSYNC`; power-loss durability is weaker there than on Linux.
 - **Live FaultLab** orders events from different nodes by their local clocks: accurate on one host, approximate across hosts. Live runs cannot be replayed exactly.

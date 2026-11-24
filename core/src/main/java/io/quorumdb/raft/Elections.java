@@ -157,6 +157,9 @@ final class Elections {
         n.role = Role.FOLLOWER;
         n.leaderId = leader;
         n.votes.clear();
+        // A held-back acknowledgement was verified against the previous leader's log, not the next one's.
+        n.awaitingAckIndex = 0;
+        n.awaitingAckReadSeq = 0;
         if (wasLeader) {
             if (n.heartbeatTimer != null) n.heartbeatTimer.cancel();
             n.heartbeatTimer = null;
