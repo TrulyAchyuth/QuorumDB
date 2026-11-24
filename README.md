@@ -212,6 +212,9 @@ network that only trusted clients can reach.
   before relying on the larger cluster's fault tolerance. FaultLab's simulator does not exercise membership
   changes. `scripts/cluster.sh` and Docker Compose start fixed clusters. A removed node keeps running idle
   until you stop it.
+- **Added nodes are missing from the stats screen's peer list.** `GrpcTransport.peerViews()` lists only the
+  peers the node started with, so a node added through a membership change does not appear there.
+- **Membership changes are not tested with TLS on.** The integration tests cover each one separately, not together.
 - **TLS is optional and off by default** (see [TLS](#tls)). Without it the Raft and client ports are plaintext and
   unauthenticated. Even with it, clients are not authenticated: any client that can reach the HTTPS port can read and
   write. The admin token only guards fault injection.
