@@ -13,6 +13,8 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * @param adminToken    bearer token for fault injection and internal endpoints. Empty disables them.
  * @param maxKeyBytes   maximum UTF-8 size of a key
  * @param maxValueBytes maximum UTF-8 size of a value
+ * @param snapshotTrailingEntries log entries kept before each snapshot's index, so slightly-behind followers
+ *                      catch up with entries instead of the whole snapshot
  */
 @ConfigurationProperties("quorumdb")
 public record NodeProperties(
@@ -33,5 +35,6 @@ public record NodeProperties(
         @DefaultValue("256") int maxKeyBytes,
         @DefaultValue("1048576") int maxValueBytes,
         @DefaultValue("") String adminToken,
-        @DefaultValue("20000") int eventBufferSize) {
+        @DefaultValue("20000") int eventBufferSize,
+        @DefaultValue("1000") long snapshotTrailingEntries) {
 }

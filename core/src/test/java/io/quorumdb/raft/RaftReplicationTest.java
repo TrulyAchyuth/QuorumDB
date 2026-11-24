@@ -313,6 +313,35 @@ class RaftReplicationTest {
         assertThat(h.lastSent(AppendEntries.class, "n3").prevLogIndex()).isEqualTo(7);
     }
 
+    @Test
+    void slightlyBehindFollowerIsSentEntriesFromTheTailInsteadOfTheSnapshot() {
+        RaftHarness h = new RaftHarness(3, false, false, 6, new MemoryStorage(), 3);
+        h.electLeader();
+        for (int i = 0; i < 6; i++) h.node.propose(("c" + i).getBytes(), r -> { });
+        h.ack("n3", 5);  // n3 has 1..5
+        h.ack("n2", 7);  // commits 7 and snapshots through 7, keeping entries 5..7
+        assertThat(h.disk.snapshotIndex()).isEqualTo(7);
+        assertThat(h.disk.firstIndex()).isEqualTo(5);
+
+        h.outbox.clear();
+        h.receive(new AppendEntriesReply("n3", 1, false, 0, 6, 0, 0)); // n3 still needs 6 onwards
+        AppendEntries catchUp = h.lastSent(AppendEntries.class, "n3");
+        assertThat(catchUp.prevLogIndex()).isEqualTo(5);
+        assertThat(catchUp.prevLogTerm()).isEqualTo(1);
+        assertThat(catchUp.entries()).extracting(LogEntry::index).containsExactly(6L, 7L);
+        assertThat(h.sent(InstallSnapshot.class)).as("no snapshot for a follower the tail covers").isEmpty();
+    }
+
+    @Test
+    void followerBehindTheTailStillGetsTheSnapshot() {
+        RaftHarness h = new RaftHarness(3, false, false, 6, new MemoryStorage(), 3);
+        h.electLeader();
+        for (int i = 0; i < 6; i++) h.node.propose(("c" + i).getBytes(), r -> { });
+        h.ack("n2", 7); // snapshot through 7, tail 5..7; n3 has nothing
+        h.receive(new AppendEntriesReply("n3", 1, false, 0, 1, 0, 0));
+        assertThat(h.lastSent(InstallSnapshot.class, "n3").lastIncludedIndex()).isEqualTo(7);
+    }
+
     /**
      * Regression: replies to heartbeats and read rounds cleared the follower's in-flight flag, and every
      * such reply re-sent the whole snapshot while the first one was still on its way. Under linearizable

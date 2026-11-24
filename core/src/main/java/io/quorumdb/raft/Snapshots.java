@@ -34,7 +34,7 @@ final class Snapshots {
         long index = n.lastApplied;
         long term = storage.termAt(index);
         byte[] data = n.stateMachine.snapshot();
-        storage.saveSnapshot(index, term, data);
+        storage.saveSnapshot(index, term, data, cfg.snapshotTrailingEntries());
         n.emit(RaftEvent.Type.SNAPSHOT_CREATED, index, term, 0, null, data.length + " bytes");
     }
 

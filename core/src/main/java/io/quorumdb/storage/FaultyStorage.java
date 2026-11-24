@@ -38,6 +38,7 @@ public final class FaultyStorage implements RaftStorage {
     @Override public long snapshotIndex() { return delegate.snapshotIndex(); }
     @Override public long snapshotTerm() { return delegate.snapshotTerm(); }
     @Override public byte[] loadSnapshot() { return delegate.loadSnapshot(); }
+    @Override public long firstIndex() { return delegate.firstIndex(); }
     @Override public long lastIndex() { return delegate.lastIndex(); }
     @Override public long termAt(long index) { return delegate.termAt(index); }
     @Override public LogEntry entry(long index) { return delegate.entry(index); }
@@ -65,9 +66,9 @@ public final class FaultyStorage implements RaftStorage {
     }
 
     @Override
-    public void saveSnapshot(long index, long term, byte[] data) {
+    public void saveSnapshot(long index, long term, byte[] data, long trailingEntries) {
         checkWritable("saveSnapshot");
-        delegate.saveSnapshot(index, term, data);
+        delegate.saveSnapshot(index, term, data, trailingEntries);
     }
 
     @Override

@@ -33,13 +33,16 @@ final class LaggingStorage implements RaftStorage {
     @Override public long snapshotIndex() { return delegate.snapshotIndex(); }
     @Override public long snapshotTerm() { return delegate.snapshotTerm(); }
     @Override public byte[] loadSnapshot() { return delegate.loadSnapshot(); }
+    @Override public long firstIndex() { return delegate.firstIndex(); } // else the default hides the snapshot tail
     @Override public long lastIndex() { return delegate.lastIndex(); }
     @Override public long termAt(long index) { return delegate.termAt(index); }
     @Override public LogEntry entry(long index) { return delegate.entry(index); }
     @Override public List<LogEntry> entries(long from, long to) { return delegate.entries(from, to); }
     @Override public void append(List<LogEntry> entries) { delegate.append(entries); }
     @Override public void truncateSuffix(long fromIndex) { delegate.truncateSuffix(fromIndex); }
-    @Override public void saveSnapshot(long index, long term, byte[] data) { delegate.saveSnapshot(index, term, data); }
+    @Override public void saveSnapshot(long index, long term, byte[] data, long trailingEntries) {
+        delegate.saveSnapshot(index, term, data, trailingEntries);
+    }
     @Override public void installSnapshot(long index, long term, byte[] data) { delegate.installSnapshot(index, term, data); }
     @Override public void close() { delegate.close(); }
 }

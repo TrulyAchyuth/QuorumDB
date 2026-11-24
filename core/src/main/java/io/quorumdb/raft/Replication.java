@@ -72,7 +72,10 @@ final class Replication {
      */
     private void sendAppend(String peer, Progress p, boolean force) {
         long now = scheduler.nowMs();
-        if (p.nextIndex <= storage.snapshotIndex()) {
+        long prev = p.nextIndex - 1;
+        if (prev != storage.snapshotIndex() && prev < storage.firstIndex()) {
+            // The entries this follower needs were compacted away (they are not even in the tail kept after
+            // the snapshot, and the term of the entry before them is unknown): ship the snapshot.
             n.snapshots.send(peer, p, force, now);
             return;
         }
