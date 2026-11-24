@@ -127,7 +127,7 @@ latency; see [BENCHMARKS.md](BENCHMARKS.md) for methodology and caveats.
 [ARCHITECTURE.md](ARCHITECTURE.md) · [RAFT_DESIGN.md](RAFT_DESIGN.md) · [CONSISTENCY_MODEL.md](CONSISTENCY_MODEL.md) ·
 [FAULTLAB.md](FAULTLAB.md) · [FAILURE_MODES.md](FAILURE_MODES.md) · [TESTING.md](TESTING.md) ·
 [BENCHMARKS.md](BENCHMARKS.md) · [CONTRIBUTING.md](CONTRIBUTING.md) · [CHANGELOG.md](CHANGELOG.md) ·
-[docs/PRIOR_ART.md](docs/PRIOR_ART.md) · [docs/PROGRESS.md](docs/PROGRESS.md) · [docs/INTERVIEW_PREP.md](docs/INTERVIEW_PREP.md) ·
+[docs/PRIOR_ART.md](docs/PRIOR_ART.md) · [docs/PROGRESS.md](docs/PROGRESS.md) ·
 [docs/HANDOVER.md](docs/HANDOVER.md)
 
 ## Known limitations
